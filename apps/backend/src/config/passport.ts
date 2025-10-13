@@ -54,7 +54,7 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
       clientID: GOOGLE_CLIENT_ID,
       clientSecret: GOOGLE_CLIENT_SECRET,
       callbackURL: googleCallback
-  }, async (accessToken: string, refreshToken: string, profile: GoogleProfile, done: (err: any, user?: any, info?: any) => void) => {
+  }, async (accessToken: string, refreshToken: string, profile: any, done: (err: any, user?: any, info?: any) => void) => {
     try {
       // Check if user exists with Google ID
       let user = await User.findOne({ 'oauthProviders.google': profile.id });

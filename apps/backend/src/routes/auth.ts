@@ -2,7 +2,6 @@ import express from 'express';
 import passport from 'passport';
 import { z } from 'zod';
 import { User } from '../models/User';
-import { AuthenticatedRequest } from '../middleware/auth';
 
 const router = express.Router();
 
@@ -99,17 +98,17 @@ router.post('/login', (req, res, next) => {
 });
 
 // Logout endpoint
-router.get('/logout', (req: AuthenticatedRequest, res) => {
-  req.logout((err) => {
+router.get('/logout', (req, res) => {
+  // req is the augmented Express Request (see src/types/express.d.ts)
+  req.logout && req.logout((err: any) => {
     if (err) {
       return res.status(500).json({ error: 'Logout failed' });
     }
-    
-    req.session.destroy((sessionErr) => {
+    req.session && req.session.destroy((sessionErr: any) => {
       if (sessionErr) {
         return res.status(500).json({ error: 'Session destruction failed' });
       }
-      
+
       res.clearCookie('connect.sid');
       res.json({ success: true, message: 'Logged out successfully' });
     });
@@ -158,7 +157,7 @@ router.get('/oauth/google/callback',
     console.info('[OAuth] Google callback handling — env BACKEND_URL:', envBackend, 'derivedBase:', derivedBase, 'using callback:', callback);
     passport.authenticate('google', { failureRedirect, callbackURL: callback } as any)(req, res, next);
   },
-  async (req: AuthenticatedRequest, res) => {
+  async (req, res) => {
     try {
       // Update last active timestamp
       await req.user?.updateLastActive();
@@ -185,7 +184,7 @@ router.get('/oauth/github/callback',
     const callback = process.env.GITHUB_CALLBACK_URL || `${backendBase}/api/auth/oauth/github/callback`;
   passport.authenticate('github', { failureRedirect, callbackURL: callback } as any)(req, res, next);
   },
-  async (req: AuthenticatedRequest, res) => {
+  async (req, res) => {
     try {
       // Update last active timestamp
       await req.user?.updateLastActive();
