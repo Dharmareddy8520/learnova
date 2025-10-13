@@ -134,6 +134,15 @@ router.get('/oauth/google', (req, res, next) => {
   passport.authenticate('google', { scope: ['profile', 'email'], callbackURL: callback } as any)(req, res, next);
 });
 
+// Backwards-compatibility: some deployments/Google Console entries accidentally have a typo
+// in the path ("oauh" instead of "oauth"). Accept that misspelled callback and forward
+// it to the correct callback path preserving query parameters so the OAuth flow can complete.
+router.get('/oauh/google/callback', (req, res) => {
+  const qs = Object.keys(req.query).length ? `?${new URLSearchParams(req.query as any).toString()}` : '';
+  // Redirect internally to the correct callback handler
+  res.redirect(`${req.baseUrl}/oauth/google/callback${qs}`);
+});
+
 router.get('/oauth/google/callback',
   (req, res, next) => {
     const failureRedirect = `${process.env.FRONTEND_URL || 'http://localhost:5174'}/login?error=oauth_failed`;
