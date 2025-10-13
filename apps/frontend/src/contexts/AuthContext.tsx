@@ -20,6 +20,12 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 // Configure axios defaults
+// Allow configuring the API host via Vite env var VITE_API_URL. If set, axios
+// will call the backend directly (recommended) which ensures cookies are set
+// for the backend origin during OAuth flows. Fall back to relative paths when
+// not provided (local dev with same-origin proxy).
+const apiBase = (import.meta as any).env?.VITE_API_URL || ''
+if (apiBase) axios.defaults.baseURL = apiBase
 axios.defaults.withCredentials = true
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
