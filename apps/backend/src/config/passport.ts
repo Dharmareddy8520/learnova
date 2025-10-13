@@ -1,8 +1,10 @@
 import passport from 'passport';
 import dotenv from 'dotenv';
 
-// Ensure .env is loaded in case this module is imported before the app entrypoint
-dotenv.config();
+// Load .env only in non-production environments so deployed platform env vars are not overwritten
+if (process.env.NODE_ENV !== 'production') {
+  dotenv.config();
+}
 import { Strategy as LocalStrategy } from 'passport-local';
 import { Strategy as GoogleStrategy, Profile as GoogleProfile } from 'passport-google-oauth20';
 import { Strategy as GitHubStrategy } from 'passport-github2';
