@@ -11,6 +11,9 @@ import { User, IUser } from '../models/User';
 // Read env once for clarity
 const { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, BACKEND_URL, GOOGLE_CALLBACK_URL } = process.env;
 
+// Helper to resolve backend base URL in prod or fallback to localhost for dev
+const resolvedBackendUrl = (BACKEND_URL && BACKEND_URL.trim()) || 'http://localhost:3001';
+
 // Local strategy
 passport.use(new LocalStrategy({
   usernameField: 'email',
@@ -42,7 +45,9 @@ passport.use(new LocalStrategy({
 // Google OAuth strategy
 if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
   try {
-    const googleCallback = GOOGLE_CALLBACK_URL || `${BACKEND_URL}/api/auth/oauth/google/callback`;
+  // Use explicit callback path that matches the routes (server redirect URI)
+  // The routes expect: /api/auth/oauth/google/callback
+  const googleCallback = GOOGLE_CALLBACK_URL || `${resolvedBackendUrl}/api/auth/oauth/google/callback`;
     passport.use(new GoogleStrategy({
       clientID: GOOGLE_CLIENT_ID,
       clientSecret: GOOGLE_CLIENT_SECRET,
@@ -91,11 +96,11 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
 
 // GitHub OAuth strategy
 if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
-  passport.use(new GitHubStrategy({
+    passport.use(new GitHubStrategy({
     clientID: process.env.GITHUB_CLIENT_ID,
     clientSecret: process.env.GITHUB_CLIENT_SECRET,
-    callbackURL: `${process.env.BACKEND_URL}/api/auth/oauth/github/callback`
-  }, async (accessToken, refreshToken, profile, done) => {
+    callbackURL: `${resolvedBackendUrl}/api/auth/oauth/github/callback`
+  }, async (accessToken: string, refreshToken: string, profile: any, done: (err: any, user?: any, info?: any) => void) => {
     try {
       // Check if user exists with GitHub ID
       let user = await User.findOne({ 'oauthProviders.github': profile.id });
