@@ -28,6 +28,12 @@ app.use(cors({
   credentials: true
 }));
 
+// When running behind Render/Cloudflare in production we must trust the proxy
+// so that secure cookies and x-forwarded-* headers work correctly.
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
+
 // Body parsing middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -44,6 +50,10 @@ app.use(session({
   cookie: {
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
+    // In production we need cross-site cookies (SameSite=None) because
+    // the frontend is hosted on a separate origin (Vercel) and we rely on
+    // cookies to be sent for authentication. Locally use 'lax' for safety.
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     maxAge: 1000 * 60 * 60 * 24 * 7 // 7 days
   }
 }));

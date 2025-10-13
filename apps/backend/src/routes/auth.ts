@@ -82,16 +82,23 @@ router.post('/login', (req, res, next) => {
       
       // Update last active timestamp
       await user.updateLastActive();
-      
-      res.json({
-        success: true,
-        user: {
-          id: user._id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          consecutiveDays: user.consecutiveDays
+      // Ensure the session is saved to the session store before returning the response
+      req.session?.save((saveErr: any) => {
+        if (saveErr) {
+          console.error('Session save error after login:', saveErr);
+          return res.status(500).json({ error: 'Failed to save session' });
         }
+
+        res.json({
+          success: true,
+          user: {
+            id: user._id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            consecutiveDays: user.consecutiveDays
+          }
+        });
       });
     });
   })(req, res, next);
@@ -162,7 +169,15 @@ router.get('/oauth/google/callback',
       // Update last active timestamp
       await req.user?.updateLastActive();
 
-      res.redirect(`${process.env.FRONTEND_URL}/dashboard`);
+      // Save the session before redirecting so the cookie is present
+      req.session?.save((saveErr: any) => {
+        if (saveErr) {
+          console.error('Session save error after OAuth callback:', saveErr);
+          return res.redirect(`${process.env.FRONTEND_URL}/login?error=session_save`);
+        }
+
+        res.redirect(`${process.env.FRONTEND_URL}/dashboard`);
+      });
     } catch (error) {
       console.error('Google OAuth callback error:', error);
       res.redirect(`${process.env.FRONTEND_URL}/login?error=oauth_callback_failed`);
