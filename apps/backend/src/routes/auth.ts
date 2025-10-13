@@ -149,41 +149,50 @@ router.get('/oauh/google/callback', (req, res) => {
   res.redirect(`${req.baseUrl}/oauth/google/callback${qs}`);
 });
 
-router.get('/oauth/google/callback',
-  (req, res, next) => {
-    const failureRedirect = `${process.env.FRONTEND_URL || 'http://localhost:5174'}/login?error=oauth_failed`;
-    const envBackend = (process.env.BACKEND_URL || '').trim();
-    const forwardedHost = (req.get('x-forwarded-host') || req.get('host') || '').toString();
-    const forwardedProto = (req.get('x-forwarded-proto') || req.protocol).toString();
-    const derivedBase = `${forwardedProto}://${forwardedHost}`;
-    const backendBase = (envBackend && !/localhost/i.test(envBackend)) ? envBackend : derivedBase;
-    const callback = (process.env.GOOGLE_CALLBACK_URL && !/localhost/i.test(process.env.GOOGLE_CALLBACK_URL))
-      ? process.env.GOOGLE_CALLBACK_URL
-      : `${backendBase}/api/auth/oauth/google/callback`;
+// Google OAuth callback (use custom callback to handle errors and save session)
+router.get('/oauth/google/callback', (req, res, next) => {
+  const failureRedirect = `${process.env.FRONTEND_URL || 'http://localhost:5174'}/login?error=oauth_failed`;
+  const envBackend = (process.env.BACKEND_URL || '').trim();
+  const forwardedHost = (req.get('x-forwarded-host') || req.get('host') || '').toString();
+  const forwardedProto = (req.get('x-forwarded-proto') || req.protocol).toString();
+  const derivedBase = `${forwardedProto}://${forwardedHost}`;
+  const backendBase = (envBackend && !/localhost/i.test(envBackend)) ? envBackend : derivedBase;
+  const callback = (process.env.GOOGLE_CALLBACK_URL && !/localhost/i.test(process.env.GOOGLE_CALLBACK_URL))
+    ? process.env.GOOGLE_CALLBACK_URL
+    : `${backendBase}/api/auth/oauth/google/callback`;
 
-    console.info('[OAuth] Google callback handling — env BACKEND_URL:', envBackend, 'derivedBase:', derivedBase, 'using callback:', callback);
-    passport.authenticate('google', { failureRedirect, callbackURL: callback } as any)(req, res, next);
-  },
-  async (req, res) => {
-    try {
-      // Update last active timestamp
-      await req.user?.updateLastActive();
+  console.info('[OAuth] Google callback handling — env BACKEND_URL:', envBackend, 'derivedBase:', derivedBase, 'using callback:', callback);
 
-      // Save the session before redirecting so the cookie is present
+  passport.authenticate('google', { failureRedirect, callbackURL: callback } as any, (err: any, user: any, info: any) => {
+    if (err) {
+      console.error('Google authenticate error:', err);
+      return res.redirect(failureRedirect);
+    }
+
+    if (!user) {
+      console.warn('Google authenticate returned no user:', info);
+      return res.redirect(failureRedirect);
+    }
+
+    req.login(user, (loginErr: any) => {
+      if (loginErr) {
+        console.error('Login after Google OAuth failed:', loginErr);
+        return res.redirect(failureRedirect);
+      }
+
+      user.updateLastActive().catch((e: any) => console.error('updateLastActive error:', e));
+
       req.session?.save((saveErr: any) => {
         if (saveErr) {
-          console.error('Session save error after OAuth callback:', saveErr);
+          console.error('Session save error after Google OAuth callback:', saveErr);
           return res.redirect(`${process.env.FRONTEND_URL}/login?error=session_save`);
         }
 
-        res.redirect(`${process.env.FRONTEND_URL}/dashboard`);
+        return res.redirect(`${process.env.FRONTEND_URL}/dashboard`);
       });
-    } catch (error) {
-      console.error('Google OAuth callback error:', error);
-      res.redirect(`${process.env.FRONTEND_URL}/login?error=oauth_callback_failed`);
-    }
-  }
-);
+    });
+  })(req, res, next);
+});
 
 // GitHub OAuth routes
 router.get('/oauth/github', (req, res, next) => {
@@ -192,24 +201,41 @@ router.get('/oauth/github', (req, res, next) => {
   passport.authenticate('github', { scope: ['user:email'], callbackURL: callback } as any)(req, res, next);
 });
 
-router.get('/oauth/github/callback',
-  (req, res, next) => {
-    const failureRedirect = `${process.env.FRONTEND_URL || 'http://localhost:5174'}/login?error=oauth_failed`;
-    const backendBase = (process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`).trim();
-    const callback = process.env.GITHUB_CALLBACK_URL || `${backendBase}/api/auth/oauth/github/callback`;
-  passport.authenticate('github', { failureRedirect, callbackURL: callback } as any)(req, res, next);
-  },
-  async (req, res) => {
-    try {
-      // Update last active timestamp
-      await req.user?.updateLastActive();
+// GitHub OAuth callback handled similarly with a custom authenticate callback
+router.get('/oauth/github/callback', (req, res, next) => {
+  const failureRedirect = `${process.env.FRONTEND_URL || 'http://localhost:5174'}/login?error=oauth_failed`;
+  const backendBase = (process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`).trim();
+  const callback = process.env.GITHUB_CALLBACK_URL || `${backendBase}/api/auth/oauth/github/callback`;
 
-      res.redirect(`${process.env.FRONTEND_URL}/dashboard`);
-    } catch (error) {
-      console.error('GitHub OAuth callback error:', error);
-      res.redirect(`${process.env.FRONTEND_URL}/login?error=oauth_callback_failed`);
+  passport.authenticate('github', { failureRedirect, callbackURL: callback } as any, (err: any, user: any, info: any) => {
+    if (err) {
+      console.error('GitHub authenticate error:', err);
+      return res.redirect(failureRedirect);
     }
-  }
-);
+
+    if (!user) {
+      console.warn('GitHub authenticate returned no user:', info);
+      return res.redirect(failureRedirect);
+    }
+
+    req.login(user, (loginErr: any) => {
+      if (loginErr) {
+        console.error('Login after GitHub OAuth failed:', loginErr);
+        return res.redirect(failureRedirect);
+      }
+
+      user.updateLastActive().catch((e: any) => console.error('updateLastActive error:', e));
+
+      req.session?.save((saveErr: any) => {
+        if (saveErr) {
+          console.error('Session save error after GitHub OAuth callback:', saveErr);
+          return res.redirect(`${process.env.FRONTEND_URL}/login?error=session_save`);
+        }
+
+        return res.redirect(`${process.env.FRONTEND_URL}/dashboard`);
+      });
+    });
+  })(req, res, next);
+});
 
 export default router;
