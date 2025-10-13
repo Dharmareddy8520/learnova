@@ -6,11 +6,11 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://learnova-srwb.onrender.com/:path*"
+      "destination": "https://learnova-srwb.onrender.com/api/:path*"
     },
     {
       "source": "/auth/:path*",
-      "destination": "https://learnova-srwb.onrender.com/:path*"
+      "destination": "https://learnova-srwb.onrender.com/api/auth/:path*"
     },
     {
       "source": "/(.*)",
