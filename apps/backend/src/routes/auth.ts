@@ -117,17 +117,24 @@ router.get('/logout', (req: AuthenticatedRequest, res) => {
 });
 
 // Google OAuth routes
-router.get('/oauth/google', passport.authenticate('google', {
-  scope: ['profile', 'email']
-}));
+router.get('/oauth/google', (req, res, next) => {
+  const backendBase = (process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`).trim();
+  const callback = process.env.GOOGLE_CALLBACK_URL || `${backendBase}/api/auth/oauth/google/callback`;
+  passport.authenticate('google', { scope: ['profile', 'email'], callbackURL: callback } as any)(req, res, next);
+});
 
-router.get('/oauth/google/callback', 
-  passport.authenticate('google', { failureRedirect: `${process.env.FRONTEND_URL}/login?error=oauth_failed` }),
+router.get('/oauth/google/callback',
+  (req, res, next) => {
+    const failureRedirect = `${process.env.FRONTEND_URL || 'http://localhost:5174'}/login?error=oauth_failed`;
+    const backendBase = (process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`).trim();
+    const callback = process.env.GOOGLE_CALLBACK_URL || `${backendBase}/api/auth/oauth/google/callback`;
+  passport.authenticate('google', { failureRedirect, callbackURL: callback } as any)(req, res, next);
+  },
   async (req: AuthenticatedRequest, res) => {
     try {
       // Update last active timestamp
       await req.user?.updateLastActive();
-      
+
       res.redirect(`${process.env.FRONTEND_URL}/dashboard`);
     } catch (error) {
       console.error('Google OAuth callback error:', error);
@@ -137,17 +144,24 @@ router.get('/oauth/google/callback',
 );
 
 // GitHub OAuth routes
-router.get('/oauth/github', passport.authenticate('github', {
-  scope: ['user:email']
-}));
+router.get('/oauth/github', (req, res, next) => {
+  const backendBase = (process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`).trim();
+  const callback = process.env.GITHUB_CALLBACK_URL || `${backendBase}/api/auth/oauth/github/callback`;
+  passport.authenticate('github', { scope: ['user:email'], callbackURL: callback } as any)(req, res, next);
+});
 
 router.get('/oauth/github/callback',
-  passport.authenticate('github', { failureRedirect: `${process.env.FRONTEND_URL}/login?error=oauth_failed` }),
+  (req, res, next) => {
+    const failureRedirect = `${process.env.FRONTEND_URL || 'http://localhost:5174'}/login?error=oauth_failed`;
+    const backendBase = (process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`).trim();
+    const callback = process.env.GITHUB_CALLBACK_URL || `${backendBase}/api/auth/oauth/github/callback`;
+  passport.authenticate('github', { failureRedirect, callbackURL: callback } as any)(req, res, next);
+  },
   async (req: AuthenticatedRequest, res) => {
     try {
       // Update last active timestamp
       await req.user?.updateLastActive();
-      
+
       res.redirect(`${process.env.FRONTEND_URL}/dashboard`);
     } catch (error) {
       console.error('GitHub OAuth callback error:', error);

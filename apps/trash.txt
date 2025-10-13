@@ -1,0 +1,1 @@
+https://learnova-srwb.onrender.com/api/auth/google/callback
