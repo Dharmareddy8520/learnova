@@ -24,7 +24,9 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 // will call the backend directly (recommended) which ensures cookies are set
 // for the backend origin during OAuth flows. Fall back to relative paths when
 // not provided (local dev with same-origin proxy).
-const apiBase = (import.meta as any).env?.VITE_API_URL || ''
+const rawApiBase = (import.meta as any).env?.VITE_API_URL || ''
+// Remove any trailing slashes to avoid double-slash when concatenating paths
+const apiBase = rawApiBase.replace(/\/+$/, '')
 if (apiBase) axios.defaults.baseURL = apiBase
 axios.defaults.withCredentials = true
 
