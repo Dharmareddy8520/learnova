@@ -11,6 +11,10 @@
     {
       "source": "/auth/:path*",
       "destination": "https://learnova-srwb.onrender.com/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
