@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "builds": [
+    { "src": "package.json", "use": "@vercel/static-build" }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://https://learnova-srwb.onrender.com/:path*"
+    }
+  ]
+}
