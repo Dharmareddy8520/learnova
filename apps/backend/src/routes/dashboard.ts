@@ -1,10 +1,9 @@
-import express from 'express';
-import { AuthenticatedRequest } from '../middleware/auth';
+import express, { Request, Response } from 'express';
 
 const router = express.Router();
 
 // Get dashboard data
-router.get('/', async (req: AuthenticatedRequest, res) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
     const user = req.user;
     

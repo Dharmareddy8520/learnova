@@ -1,10 +1,9 @@
-import express from 'express';
-import { AuthenticatedRequest } from '../middleware/auth';
+import express, { Request, Response } from 'express';
 
 const router = express.Router();
 
 // Get current user info
-router.get('/me', async (req: AuthenticatedRequest, res) => {
+router.get('/me', async (req: Request, res: Response) => {
   try {
     const user = req.user;
     
@@ -36,7 +35,7 @@ router.get('/me', async (req: AuthenticatedRequest, res) => {
 });
 
 // Update user preferences
-router.put('/preferences', async (req: AuthenticatedRequest, res) => {
+router.put('/preferences', async (req: Request, res: Response) => {
   try {
     const user = req.user;
     
