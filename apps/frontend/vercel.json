@@ -6,7 +6,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://https://learnova-srwb.onrender.com/:path*"
+      "destination": "https://learnova-srwb.onrender.com/:path*"
     }
   ]
 }
