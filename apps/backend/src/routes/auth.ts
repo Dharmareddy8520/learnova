@@ -118,17 +118,36 @@ router.get('/logout', (req: AuthenticatedRequest, res) => {
 
 // Google OAuth routes
 router.get('/oauth/google', (req, res, next) => {
-  const backendBase = (process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`).trim();
-  const callback = process.env.GOOGLE_CALLBACK_URL || `${backendBase}/api/auth/oauth/google/callback`;
+  // Prefer an explicit BACKEND_URL if it's set to a non-localhost value.
+  // Otherwise derive the public host from X-Forwarded headers (used by Render/Cloudflare) or the request host.
+  const envBackend = (process.env.BACKEND_URL || '').trim();
+  const forwardedHost = (req.get('x-forwarded-host') || req.get('host') || '').toString();
+  const forwardedProto = (req.get('x-forwarded-proto') || req.protocol).toString();
+  const derivedBase = `${forwardedProto}://${forwardedHost}`;
+  const backendBase = (envBackend && !/localhost/i.test(envBackend)) ? envBackend : derivedBase;
+  const callback = (process.env.GOOGLE_CALLBACK_URL && !/localhost/i.test(process.env.GOOGLE_CALLBACK_URL))
+    ? process.env.GOOGLE_CALLBACK_URL
+    : `${backendBase}/api/auth/oauth/google/callback`;
+
+  console.info('[OAuth] Google auth initiation — env BACKEND_URL:', envBackend, 'derivedBase:', derivedBase, 'using callback:', callback);
+
   passport.authenticate('google', { scope: ['profile', 'email'], callbackURL: callback } as any)(req, res, next);
 });
 
 router.get('/oauth/google/callback',
   (req, res, next) => {
     const failureRedirect = `${process.env.FRONTEND_URL || 'http://localhost:5174'}/login?error=oauth_failed`;
-    const backendBase = (process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`).trim();
-    const callback = process.env.GOOGLE_CALLBACK_URL || `${backendBase}/api/auth/oauth/google/callback`;
-  passport.authenticate('google', { failureRedirect, callbackURL: callback } as any)(req, res, next);
+    const envBackend = (process.env.BACKEND_URL || '').trim();
+    const forwardedHost = (req.get('x-forwarded-host') || req.get('host') || '').toString();
+    const forwardedProto = (req.get('x-forwarded-proto') || req.protocol).toString();
+    const derivedBase = `${forwardedProto}://${forwardedHost}`;
+    const backendBase = (envBackend && !/localhost/i.test(envBackend)) ? envBackend : derivedBase;
+    const callback = (process.env.GOOGLE_CALLBACK_URL && !/localhost/i.test(process.env.GOOGLE_CALLBACK_URL))
+      ? process.env.GOOGLE_CALLBACK_URL
+      : `${backendBase}/api/auth/oauth/google/callback`;
+
+    console.info('[OAuth] Google callback handling — env BACKEND_URL:', envBackend, 'derivedBase:', derivedBase, 'using callback:', callback);
+    passport.authenticate('google', { failureRedirect, callbackURL: callback } as any)(req, res, next);
   },
   async (req: AuthenticatedRequest, res) => {
     try {
