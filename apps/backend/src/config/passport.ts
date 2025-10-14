@@ -1,9 +1,24 @@
 import passport from 'passport';
 import dotenv from 'dotenv';
+import path from 'path';
+import fs from 'fs';
 
-// Load .env only in non-production environments so deployed platform env vars are not overwritten
+// Load local .env explicitly in development so environment variables are available
+// to this module regardless of import order. This uses apps/backend/.env when
+// present and falls back to default dotenv behavior.
 if (process.env.NODE_ENV !== 'production') {
-  dotenv.config();
+  try {
+    const envPath = path.resolve(__dirname, '../../.env');
+    if (fs.existsSync(envPath)) {
+      dotenv.config({ path: envPath });
+      console.info(`Loaded local .env from ${envPath}`);
+    } else {
+      dotenv.config();
+      console.info('Loaded default .env (no apps/backend/.env found)');
+    }
+  } catch (err) {
+    console.warn('Failed to load local .env:', err);
+  }
 }
 import { Strategy as LocalStrategy } from 'passport-local';
 import { Strategy as GoogleStrategy, Profile as GoogleProfile } from 'passport-google-oauth20';
@@ -98,11 +113,12 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
 
 // GitHub OAuth strategy
 if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
+  try {
     passport.use(new GitHubStrategy({
-    clientID: process.env.GITHUB_CLIENT_ID,
-    clientSecret: process.env.GITHUB_CLIENT_SECRET,
-    callbackURL: `${resolvedBackendUrl}/api/auth/oauth/github/callback`
-  }, async (accessToken: string, refreshToken: string, profile: any, done: (err: any, user?: any, info?: any) => void) => {
+      clientID: process.env.GITHUB_CLIENT_ID,
+      clientSecret: process.env.GITHUB_CLIENT_SECRET,
+      callbackURL: `${resolvedBackendUrl}/api/auth/oauth/github/callback`
+    }, async (accessToken: string, refreshToken: string, profile: any, done: (err: any, user?: any, info?: any) => void) => {
     try {
       // Check if user exists with GitHub ID
       let user = await User.findOne({ 'oauthProviders.github': profile.id });
@@ -135,7 +151,11 @@ if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
     } catch (error) {
       return done(error);
     }
-  }));
+    }));
+    console.log('✅ GitHub OAuth strategy configured — callback URL:', `${resolvedBackendUrl}/api/auth/oauth/github/callback`);
+  } catch (err) {
+    console.error('❌ Error configuring GitHub OAuth strategy:', err);
+  }
 } else {
   console.log('⚠️ GitHub OAuth credentials not provided - GitHub login disabled');
 }

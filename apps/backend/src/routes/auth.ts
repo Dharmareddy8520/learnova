@@ -196,6 +196,12 @@ router.get('/oauth/google/callback', (req, res, next) => {
 
 // GitHub OAuth routes
 router.get('/oauth/github', (req, res, next) => {
+  // If GitHub strategy wasn't configured, respond with a clear error instead of throwing
+  if (!(passport as any)._strategy || !(passport as any)._strategy('github')) {
+    console.warn('GitHub OAuth requested but strategy not configured. Ensure GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET are set.');
+    return res.status(503).json({ error: 'GitHub OAuth not configured on the server' });
+  }
+
   const backendBase = (process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`).trim();
   const callback = process.env.GITHUB_CALLBACK_URL || `${backendBase}/api/auth/oauth/github/callback`;
   passport.authenticate('github', { scope: ['user:email'], callbackURL: callback } as any)(req, res, next);
@@ -206,6 +212,12 @@ router.get('/oauth/github/callback', (req, res, next) => {
   const failureRedirect = `${process.env.FRONTEND_URL || 'http://localhost:5174'}/login?error=oauth_failed`;
   const backendBase = (process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`).trim();
   const callback = process.env.GITHUB_CALLBACK_URL || `${backendBase}/api/auth/oauth/github/callback`;
+
+  // If GitHub strategy isn't configured, redirect to frontend with an explanatory error
+  if (!(passport as any)._strategy || !(passport as any)._strategy('github')) {
+    console.warn('GitHub OAuth callback invoked but strategy not configured.');
+    return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5174'}/login?error=github_not_configured`);
+  }
 
   passport.authenticate('github', { failureRedirect, callbackURL: callback } as any, (err: any, user: any, info: any) => {
     if (err) {
