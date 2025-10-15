@@ -4,6 +4,7 @@ import LandingPage from './pages/LandingPage'
 import SignupPage from './pages/SignupPage'
 import LoginPage from './pages/LoginPage'
 import Dashboard from './pages/Dashboard'
+import MLTools from './pages/MLTools'
 import ProtectedRoute from './components/ProtectedRoute'
 
 function App() {
@@ -14,6 +15,7 @@ function App() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/login" element={<LoginPage />} />
+            <Route path="/tools" element={<MLTools />} />
           <Route 
             path="/dashboard" 
             element={

@@ -16,6 +16,9 @@ const LandingPage = () => {
               <Link to="/login" className="text-gray-600 hover:text-gray-900">
                 Sign In
               </Link>
+              <Link to="/tools" className="text-gray-600 hover:text-gray-900">
+                Tools
+              </Link>
               <Link to="/signup" className="btn btn-primary">
                 Get Started
               </Link>
