@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { Brain, Calendar, BookOpen, Zap, LogOut, User } from 'lucide-react'
+import { Brain, Calendar, BookOpen, Zap, LogOut, User, Home } from 'lucide-react'
 import axios from 'axios'
 import { useNavigate, useParams } from 'react-router-dom';
 import Summarization from './features/Summarization';
@@ -47,23 +47,23 @@ const Dashboard = () => {
   }
 
   const handleQuickPaste = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!quickPasteText.trim()) return
+    e.preventDefault();
+    if (!quickPasteText.trim()) return;
 
-    setIsSummarizing(true)
+    setIsSummarizing(true);
     try {
-      const response = await axios.post('/api/documents/paste', {
-        text: quickPasteText
-      })
-      setSummary(response.data.summary)
-      setQuickPasteText('')
+      const response = await axios.post('/api/ml/summarize', {
+        text: quickPasteText,
+      });
+      setSummary(response.data.summary);
+      setQuickPasteText('');
     } catch (error) {
-      console.error('Failed to summarize text:', error)
-      setSummary('Sorry, summarization is not available yet. This feature will be implemented in Step 3.')
+      console.error('Failed to summarize text:', error);
+      setSummary('Sorry, summarization failed. Please try again later.');
     } finally {
-      setIsSummarizing(false)
+      setIsSummarizing(false);
     }
-  }
+  };
 
   const handleLogout = async () => {
     try {
@@ -242,38 +242,50 @@ const Dashboard = () => {
         </div>
 
         {/* Feature Component Rendering */}
-        <div className="mt-8 ml-64"> {/* Adjust layout to accommodate sidebar */}
+        <div className="ml-64 mt-8">
           {renderFeature()}
         </div>
       </div>
 
       {/* Sidebar for Study Buddy AI Features */}
-      <div className="fixed top-0 left-0 h-full w-64 bg-white shadow-md">
-        <div className="p-4">
-          <h2 className="text-lg font-bold text-gray-900 mb-4">Study Buddy AI</h2>
-          <ul className="space-y-2">
+      <div className="fixed top-0 left-0 h-full w-16 bg-gray-900 shadow-md z-10 overflow-y-auto hidden md:block">
+        <div className="flex flex-col items-center py-4">
+          <div className="mb-6">
+            <img src="/logo.png" alt="Logo" className="h-8 w-8" />
+          </div>
+          <ul className="space-y-6">
             <li>
-              <button className="w-full text-left text-gray-700 hover:text-primary-600" onClick={() => navigateToFeature('summarize')}>
-                Summarization
+              <button className="text-gray-400 hover:text-white" onClick={() => navigateToFeature('summarize')}>
+                <Home className="h-6 w-6" />
               </button>
             </li>
             <li>
-              <button className="w-full text-left text-gray-700 hover:text-primary-600" onClick={() => navigateToFeature('quiz')}>
-                Quiz Generation
+              <button className="text-gray-400 hover:text-white" onClick={() => navigateToFeature('quiz')}>
+                <Brain className="h-6 w-6" />
               </button>
             </li>
             <li>
-              <button className="w-full text-left text-gray-700 hover:text-primary-600" onClick={() => navigateToFeature('qa')}>
-                Q&A Assistance
+              <button className="text-gray-400 hover:text-white" onClick={() => navigateToFeature('qa')}>
+                <BookOpen className="h-6 w-6" />
               </button>
             </li>
             <li>
-              <button className="w-full text-left text-gray-700 hover:text-primary-600" onClick={() => navigateToFeature('flashcards')}>
-                Flashcard Creation
+              <button className="text-gray-400 hover:text-white" onClick={() => navigateToFeature('flashcards')}>
+                <Brain className="h-6 w-6" />
               </button>
             </li>
           </ul>
+          <div className="mt-auto">
+            <button className="text-gray-400 hover:text-white">
+              <User className="h-6 w-6" />
+            </button>
+          </div>
         </div>
+      </div>
+
+      {/* Adjust layout to accommodate sidebar */}
+      <div className="ml-16 mt-8">
+        {renderFeature()}
       </div>
     </div>
   )
