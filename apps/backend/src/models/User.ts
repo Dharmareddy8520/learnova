@@ -39,7 +39,7 @@ const UserSchema = new Schema<IUser>({
   },
   passwordHash: {
     type: String,
-    required: function() {
+    required: function(this: IUser) {
       return !this.oauthProviders?.google && !this.oauthProviders?.github;
     }
   },

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { Brain, Calendar, BookOpen, Zap, LogOut, User } from 'lucide-react'
+import { Brain, Calendar, BookOpen, Zap, LogOut, User, Home } from 'lucide-react'
 import axios from 'axios'
 
 interface DashboardData {
@@ -45,14 +45,14 @@ const Dashboard = () => {
 
     setIsSummarizing(true)
     try {
-      const response = await axios.post('/api/documents/paste', {
+      const response = await axios.post('/api/ml/summarize', {
         text: quickPasteText
       })
       setSummary(response.data.summary)
       setQuickPasteText('')
     } catch (error) {
       console.error('Failed to summarize text:', error)
-      setSummary('Sorry, summarization is not available yet. This feature will be implemented in Step 3.')
+      setSummary('Sorry, summarization failed. Please try again later.')
     } finally {
       setIsSummarizing(false)
     }
@@ -64,6 +64,16 @@ const Dashboard = () => {
     } catch (error) {
       console.error('Logout failed:', error)
     }
+  }
+
+  const navigateToFeature = (feature: string) => {
+    console.log(`Navigating to feature: ${feature}`)
+    // Add navigation logic here
+  }
+
+  const renderFeature = () => {
+    console.log('Rendering feature')
+    // Add rendering logic here
   }
 
   if (isLoading) {
@@ -214,6 +224,47 @@ const Dashboard = () => {
             ))}
           </div>
         </div>
+      </div>
+
+      {/* Sidebar for Study Buddy AI Features */}
+      <div className="fixed top-0 left-0 h-full w-16 bg-gray-900 shadow-md z-10 overflow-y-auto hidden md:block">
+        <div className="flex flex-col items-center py-4">
+          <div className="mb-6">
+            <img src="/logo.png" alt="Logo" className="h-8 w-8" />
+          </div>
+          <ul className="space-y-6">
+            <li>
+              <button className="text-gray-400 hover:text-white" onClick={() => navigateToFeature('summarize')}>
+                <Home className="h-6 w-6" />
+              </button>
+            </li>
+            <li>
+              <button className="text-gray-400 hover:text-white" onClick={() => navigateToFeature('quiz')}>
+                <Brain className="h-6 w-6" />
+              </button>
+            </li>
+            <li>
+              <button className="text-gray-400 hover:text-white" onClick={() => navigateToFeature('qa')}>
+                <BookOpen className="h-6 w-6" />
+              </button>
+            </li>
+            <li>
+              <button className="text-gray-400 hover:text-white" onClick={() => navigateToFeature('flashcards')}>
+                <Brain className="h-6 w-6" />
+              </button>
+            </li>
+          </ul>
+          <div className="mt-auto">
+            <button className="text-gray-400 hover:text-white">
+              <User className="h-6 w-6" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Adjust layout to accommodate sidebar */}
+      <div className="ml-16 mt-8">
+        {renderFeature()}
       </div>
     </div>
   )
