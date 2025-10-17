@@ -2,6 +2,11 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { Brain, Calendar, BookOpen, Zap, LogOut, User } from 'lucide-react'
 import axios from 'axios'
+import { useNavigate, useParams } from 'react-router-dom';
+import Summarization from './features/Summarization';
+import QuizGeneration from './features/QuizGeneration';
+import QA from './features/QA';
+import Flashcards from './features/Flashcards';
 
 interface DashboardData {
   recentDocs: any[]
@@ -23,6 +28,8 @@ const Dashboard = () => {
   const [quickPasteText, setQuickPasteText] = useState('')
   const [isSummarizing, setIsSummarizing] = useState(false)
   const [summary, setSummary] = useState('')
+  const navigate = useNavigate();
+  const { feature } = useParams();
 
   useEffect(() => {
     fetchDashboardData()
@@ -65,6 +72,25 @@ const Dashboard = () => {
       console.error('Logout failed:', error)
     }
   }
+
+  const navigateToFeature = (feature: string) => {
+    navigate(`/features/${feature}`)
+  }
+
+  const renderFeature = () => {
+    switch (feature) {
+      case 'summarize':
+        return <Summarization />;
+      case 'quiz':
+        return <QuizGeneration />;
+      case 'qa':
+        return <QA />;
+      case 'flashcards':
+        return <Flashcards />;
+      default:
+        return <p>Select a feature from the sidebar.</p>;
+    }
+  };
 
   if (isLoading) {
     return (
@@ -213,6 +239,40 @@ const Dashboard = () => {
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Feature Component Rendering */}
+        <div className="mt-8 ml-64"> {/* Adjust layout to accommodate sidebar */}
+          {renderFeature()}
+        </div>
+      </div>
+
+      {/* Sidebar for Study Buddy AI Features */}
+      <div className="fixed top-0 left-0 h-full w-64 bg-white shadow-md">
+        <div className="p-4">
+          <h2 className="text-lg font-bold text-gray-900 mb-4">Study Buddy AI</h2>
+          <ul className="space-y-2">
+            <li>
+              <button className="w-full text-left text-gray-700 hover:text-primary-600" onClick={() => navigateToFeature('summarize')}>
+                Summarization
+              </button>
+            </li>
+            <li>
+              <button className="w-full text-left text-gray-700 hover:text-primary-600" onClick={() => navigateToFeature('quiz')}>
+                Quiz Generation
+              </button>
+            </li>
+            <li>
+              <button className="w-full text-left text-gray-700 hover:text-primary-600" onClick={() => navigateToFeature('qa')}>
+                Q&A Assistance
+              </button>
+            </li>
+            <li>
+              <button className="w-full text-left text-gray-700 hover:text-primary-600" onClick={() => navigateToFeature('flashcards')}>
+                Flashcard Creation
+              </button>
+            </li>
+          </ul>
         </div>
       </div>
     </div>

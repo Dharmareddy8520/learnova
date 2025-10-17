@@ -128,90 +128,59 @@ async function coerceJson(model: string, rawText: string) {
 }
 
 export async function generateQuiz(text: string, count = 5) {
-  const configured = process.env.HF_INSTRUCT_MODEL || process.env.HF_MODEL
-  // Use HF models that are generally available on the inference API; avoid models that commonly 404.
-  const defaults = [configured, 'google/flan-t5-large', 'sshleifer/distilbart-cnn-12-6', 'facebook/bart-large-cnn']
-  const models = defaults.filter(Boolean) as string[]
-  const clean = redactSensitive(text)
-  const example = `[START OF EXAMPLE]\nContext: The Moon is Earth's only natural satellite. It is the fifth largest satellite in the Solar System. The dark areas on its surface are called maria.\nQuiz:\nQ: What is the Moon's status relative to Earth?\nA) A man-made satellite\nB) A natural satellite\nC) A dwarf planet\nD) A star\nAnswer: B\nQ: The dark areas on the Moon's surface are known as what?\nA) Craters\nB) Valleys\nC) Maria\nD) Highlands\nAnswer: C\n[END OF EXAMPLE]`
+  const example = `[START OF EXAMPLE]
+Context: The Moon is Earth's only natural satellite. It is the fifth largest satellite in the Solar System. The dark areas on its surface are called maria.
+Quiz:
+Q: What is the Moon's status relative to Earth?
+A) A man-made satellite
+B) A natural satellite
+C) A dwarf planet
+D) A star
+Answer: B
+Q: The dark areas on the Moon's surface are known as what?
+A) Craters
+B) Valleys
+C) Maria
+D) Highlands
+Answer: C
+[END OF EXAMPLE]`;
 
-  const prompt = `${example}\n\n[START OF TASK]\nContext: ${clean}\n\nGenerate exactly ${count} multiple-choice questions in the same format. Each question must have 4 options (A-D) and indicate the correct Answer.\n\nQuiz:`
-  const payload = { inputs: prompt, parameters: { max_new_tokens: 700, temperature: 0.0 } }
+  const prompt = `${example}\n\n[START OF TASK]\nContext: ${text}\n\nGenerate exactly ${count} multiple-choice questions in the same format. Each question must have 4 options (A-D) and indicate the correct Answer.\n\nQuiz:`;
 
-  const { out, model } = await tryModels(models, payload)
-  let raw = parseModelOutput(out)
-
-  // Try to parse JSON. If it fails, ask model to coerce output into valid JSON once.
-  try {
-    return JSON.parse(raw)
-  } catch (e) {
+  if (process.env.GEMINI_API_KEY) {
     try {
-      const coerced = await coerceJson(model, raw)
-      return JSON.parse(coerced)
-    } catch (e2) {
-      // If HF failed completely and Gemini is configured, try Gemini as a fallback
-      if (process.env.GEMINI_API_KEY) {
-        try {
-          const geminiOut = await generateWithGemini('gemini-1.5-flash', prompt)
-            // geminiOut likely returns a string; try to parse JSON first
-            try { return JSON.parse(geminiOut) } catch {}
-
-            // Try to parse QA formatted output (Q:, A) ..., Answer: X)
-            const parseQAFormat = (rawText: string) => {
-              if (!rawText) return null
-              const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
-              const items: any[] = []
-              let i = 0
-              while (i < lines.length) {
-                const line = lines[i]
-                if (!/^Q:/i.test(line)) { i++; continue }
-                const question = line.replace(/^Q:\s*/i, '').trim()
-                i++
-                const choices: string[] = []
-                while (i < lines.length && choices.length < 4) {
-                  const m = lines[i].match(/^([A-D])\)\s*(.*)$/i)
-                  if (m) { choices.push(m[2].trim()); i++; continue }
-                  break
-                }
-                let answerIndex = -1
-                if (i < lines.length && /^Answer:/i.test(lines[i])) {
-                  const a = lines[i].replace(/^Answer:\s*/i, '').trim()
-                  const idx = ['A','B','C','D'].indexOf(a.toUpperCase())
-                  answerIndex = idx >= 0 ? idx : -1
-                  i++
-                }
-                if (question && choices.length === 4 && answerIndex >= 0) {
-                  items.push({ question, choices, answerIndex })
-                }
-              }
-              return items.length ? items : null
-            }
-
-            const parsed = parseQAFormat(geminiOut)
-            if (parsed) return parsed
-            return geminiOut
-        } catch (gErr: any) {
-          // final fallback: return raw HF output
-          console.warn('Gemini fallback failed', gErr?.message || gErr)
-          return raw
-        }
-      }
-      // Last resort: return raw string so frontend can show it
-      return raw
+      const geminiOut = await generateWithGemini('models/gemini-2.5-pro', prompt);
+      return geminiOut;
+    } catch (err) {
+      console.warn('Gemini quiz fallback failed', err);
     }
   }
+
+  const models = ['google/flan-t5-large', 'sshleifer/distilbart-cnn-12-6']
+  const payload = { inputs: prompt, parameters: { max_new_tokens: 600, temperature: 0.0 } }
+  const { out } = await tryModels(models, payload)
+  return typeof out === 'string' ? out : parseModelOutput(out)
 }
 
 export async function generateFlashcards(text: string, count = 10) {
+  const exampleF = `[START OF EXAMPLE]\nContext: The Moon is Earth's only natural satellite. It is the fifth largest satellite in the Solar System. The dark areas on its surface are called maria.\nFlashcards:\nFlashcard 1:\nFront: What is Earth's only natural satellite?\nBack: The Moon\nFlashcard 2:\nFront: What are the dark areas on the Moon's surface called?\nBack: Maria\n[END OF EXAMPLE]`;
+
+  const prompt = `${exampleF}\n\n[START OF TASK]\nContext: ${text}\n\nGenerate exactly ${count} flashcards in the same format.\n\nFlashcards:`;
+
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      const geminiOut = await generateWithGemini('models/gemini-2.5-pro', prompt);
+      return geminiOut;
+    } catch (err) {
+      console.warn('Gemini flashcard fallback failed', err);
+    }
+  }
+
   const configuredF = process.env.HF_INSTRUCT_MODEL || process.env.HF_MODEL
   const defaultsF = [configuredF, 'google/flan-t5-large', 'sshleifer/distilbart-cnn-12-6', 'facebook/bart-large-cnn']
   const modelsF = defaultsF.filter(Boolean) as string[]
   const clean = redactSensitive(text)
-  const exampleF = `[START OF EXAMPLE]\nContext: The Moon is Earth's only natural satellite. It is the fifth largest satellite in the Solar System. The dark areas on its surface are called maria.\nFlashcards:\nFlashcard 1:\nFront: What is Earth's only natural satellite?\nBack: The Moon\nFlashcard 2:\nFront: What are the dark areas on the Moon's surface called?\nBack: Maria\n[END OF EXAMPLE]`
-
-  const prompt = `${exampleF}\n\n[START OF TASK]\nContext: ${clean}\n\nGenerate exactly ${count} flashcards in the same format.\n\nFlashcards:`
   const payload = { inputs: prompt, parameters: { max_new_tokens: 700, temperature: 0.0 } }
-
   const { out: outF, model: modelF } = await tryModels(modelsF, payload)
   const raw = parseModelOutput(outF)
 
@@ -254,7 +223,7 @@ export async function generateFlashcards(text: string, count = 10) {
     } catch (e2) {
       if (process.env.GEMINI_API_KEY) {
         try {
-          const geminiOut = await generateWithGemini('gemini-1.5-flash', prompt)
+          const geminiOut = await generateWithGemini('models/gemini-2.5-pro', prompt)
           try { return JSON.parse(geminiOut) } catch {}
 
           // try parsing Gemini front/back format
@@ -289,6 +258,14 @@ export async function generateFlashcards(text: string, count = 10) {
       return raw
     }
   }
+}
+
+export async function qa(text: string, question: string) {
+  const models = ['distilbert-base-cased-distilled-squad']
+  const payload = { inputs: { question, context: text } }
+  const { out } = await tryModels(models, payload)
+  if (out && out.answer) return out.answer
+  return parseModelOutput(out)
 }
 
 export default hfRequest

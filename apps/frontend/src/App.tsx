@@ -24,6 +24,14 @@ function App() {
               </ProtectedRoute>
             } 
           />
+          <Route 
+            path="/features/:feature" 
+            element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            } 
+          />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>

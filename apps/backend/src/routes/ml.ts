@@ -1,7 +1,10 @@
 import express from 'express'
-import { summarizeText, generateQuiz, generateFlashcards } from '../services/hf'
+import multer from 'multer'
+import { summarizeText, generateQuiz, generateFlashcards, qa } from '../services/hf'
+import { processDocument } from '../services/document'
 
 const router = express.Router()
+const upload = multer({ dest: 'uploads/' })
 
 // Simple status endpoint to check whether HF_API_KEY is present in the running process
 router.get('/status', (req, res) => {
@@ -76,6 +79,30 @@ router.post('/flashcards', async (req, res) => {
   } catch (err: any) {
     console.error('flashcards error', err)
     res.status(500).json({ error: err.message || 'flashcard generation failed' })
+  }
+})
+
+router.post('/upload', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
+    const content = await processDocument(req.file.path)
+    res.json({ content })
+  } catch (err: any) {
+    console.error('upload error', err)
+    res.status(500).json({ error: err.message || 'File processing failed' })
+  }
+})
+
+router.post('/qa', async (req, res) => {
+  try {
+    const { text, question } = req.body
+    if (!text || !question) return res.status(400).json({ error: 'text and question required' })
+    // Assuming you have a qa function in hf.ts
+    const answer = await qa(text, question)
+    res.json({ answer })
+  } catch (err: any) {
+    console.error('qa error', err)
+    res.status(500).json({ error: err.message || 'Q&A failed' })
   }
 })
 
