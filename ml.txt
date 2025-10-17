@@ -1,0 +1,83 @@
+Description:
+Study Buddy AI is an intelligent, web-based application designed to assist students, educators, and professionals in processing and understanding study materials. With advanced AI-powered features, it simplifies complex tasks like summarization, quiz generation, Q&A, and flashcard creation. The application supports both text input and document uploads, making it versatile and user-friendly.
+
+Features:
+Text Summarization:
+
+Quickly generate concise summaries of study materials.
+Supports both short text inputs and long documents (e.g., PDFs, Word files).
+Uses advanced models like sshleifer/distilbart-cnn-12-6 for text and allenai/led-large-16384 for large documents.
+Quiz Generation:
+
+Automatically create multiple-choice quizzes from the provided text or document.
+Each quiz includes 4 options per question with the correct answer highlighted.
+Powered by the Gemini API for high-quality question generation.
+Q&A Assistance:
+
+Ask questions based on the uploaded document or input text.
+Provides accurate answers using the distilbert-base-cased-distilled-squad model.
+Flashcard Creation:
+
+Generate flashcards with a "front" and "back" format for effective learning.
+Ideal for quick revision and memorization.
+Document Upload:
+
+Supports .txt, .pdf, and .docx file uploads.
+Automatically extracts text from documents for processing.
+Handles large documents with advanced chunking and summarization techniques.
+User-Friendly Interface:
+
+Built with Gradio for an intuitive and interactive web experience.
+Allows users to select tasks, upload files, and view results seamlessly.
+Scope of the Project:
+Target Audience:
+
+Students preparing for exams.
+Educators creating learning materials.
+Professionals summarizing lengthy reports or documents.
+Core Functionalities:
+
+AI-powered summarization for both short and long texts.
+Automated quiz and flashcard generation for self-assessment.
+Q&A functionality for extracting key insights from study materials.
+Technology Stack:
+
+Frontend: Gradio for an interactive web interface.
+Backend: Python with Hugging Face Transformers and LangChain for AI models.
+Models:
+sshleifer/distilbart-cnn-12-6 for text summarization.
+allenai/led-large-16384 for large document summarization.
+distilbert-base-cased-distilled-squad for Q&A.
+Document Processing:
+PyPDF2 for PDFs.
+python-docx for Word documents.
+Deployment:
+
+Hosted on Hugging Face Spaces for easy accessibility.
+Scalable and optimized for web-based usage.
+Future Enhancements:
+
+Add support for additional file formats (e.g., .epub).
+Integrate multilingual support for non-English documents.
+Enable real-time collaboration for group study sessions.
+How It Works:
+Input Options:
+
+Paste text directly into the input box.
+Upload a .txt, .pdf, or .docx file.
+Select a Task:
+
+Choose from "Summary," "Quiz," "Q&A," or "Flashcards."
+Customize Output:
+
+Adjust the number of questions or flashcards using a slider.
+Enter a specific question for the Q&A task.
+Generate Results:
+
+Click "Generate" to process the input and display the output in seconds.
+Why Choose Study Buddy AI?
+Efficiency: Save hours of manual effort by automating repetitive tasks.
+Accuracy: Leverage state-of-the-art AI models for reliable results.
+Flexibility: Works with both text and document inputs.
+Accessibility: A web-based solution that works on any device.
+Deploy Study Buddy AI today and revolutionize the way you learn and teach!
