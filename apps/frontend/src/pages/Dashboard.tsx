@@ -71,9 +71,8 @@ const Dashboard = () => {
     // Add navigation logic here
   }
 
-  const renderFeature = () => {
-    console.log('Rendering feature')
-    // Add rendering logic here
+  const renderFeature = (): React.ReactNode => {
+    return <div>Feature content goes here</div>
   }
 
   if (isLoading) {
