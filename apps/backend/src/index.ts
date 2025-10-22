@@ -14,6 +14,7 @@ import authRoutes from './routes/auth';
 import userRoutes from './routes/user';
 import dashboardRoutes from './routes/dashboard';
 import mlRoutes from './routes/ml';
+import quizRoutes from './routes/quiz';
 import { isAuthenticated } from './middleware/auth';
 
 const app = express();
@@ -71,6 +72,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/user', isAuthenticated, userRoutes);
 app.use('/api/dashboard', isAuthenticated, dashboardRoutes);
 app.use('/api/ml', mlRoutes);
+app.use('/api/quiz', quizRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

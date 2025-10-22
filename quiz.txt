@@ -1,0 +1,23 @@
+const prompt = `
+You are an intelligent quiz generator.
+
+Analyze the following text and generate ${numQuestions} multiple-choice questions (MCQs).
+Each question should test the user's understanding of the text, not memorization.
+Return the output in pure JSON format.
+
+Rules:
+- Each question must have exactly 4 options.
+- Include the correct answer text in "answer".
+- Do NOT include explanations.
+
+Text:
+"""${userPastedText}"""
+Format:
+[
+  {
+    "question": "...",
+    "options": ["A", "B", "C", "D"],
+    "answer": "..."
+  }
+]
+`;
