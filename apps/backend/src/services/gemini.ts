@@ -1,40 +1,46 @@
-const GEN_API_BASE = 'https://generativelanguage.googleapis.com/v1beta2/models'
+// services/gemini.ts
+import { GoogleGenerativeAI, Content } from '@google/generative-ai'
 
-export async function generateWithGemini(model: string, prompt: string, maxOutputTokens = 600, temperature = 0.7) {
-  const key = process.env.GEMINI_API_KEY
-  if (!key) throw new Error('GEMINI_API_KEY not configured')
+/**
+ * Generate text with Gemini (supports 2.5-flash and others)
+ * @param modelIdOrPrompt - model name or prompt (auto-detects usage)
+ * @param maybePrompt - prompt if first arg was modelId
+ */
+export async function generateWithGemini(
+  modelIdOrPrompt: string,
+  maybePrompt?: string
+): Promise<string> {
+  // allow both generateWithGemini(prompt) or generateWithGemini(modelId, prompt)
+  const hasTwoArgs = typeof maybePrompt === 'string'
+  const modelId =
+    (hasTwoArgs ? modelIdOrPrompt : process.env.GEMINI_MODEL_ID)?.trim() ||
+    'gemini-2.5-flash'
+  const prompt = (hasTwoArgs ? maybePrompt : modelIdOrPrompt).trim()
 
-  const url = `${GEN_API_BASE}/${model}:generateText?key=${encodeURIComponent(key)}`
+  const apiKey = process.env.GEMINI_API_KEY
+  if (!apiKey) throw new Error('GEMINI_API_KEY is not configured')
 
-  const body = {
-    prompt: { text: prompt },
-    temperature,
-    maxOutputTokens,
-  }
+  const genAI = new GoogleGenerativeAI(apiKey)
+  const model = genAI.getGenerativeModel({ model: modelId })
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-
-  if (!res.ok) {
-    const txt = await res.text().catch(() => '')
-    throw new Error(`Gemini ${res.status} ${res.statusText} - ${txt}`)
-  }
-
-  const data: any = await res.json().catch(() => null)
-  // The response often contains candidates with 'content'
   try {
-    if (data?.candidates && Array.isArray(data.candidates) && data.candidates[0]?.content) {
-      return data.candidates[0].content as string
+    // Properly typed Content array (must include role)
+    const contents: Content[] = [
+      {
+        role: 'user',
+        parts: [{ text: prompt }],
+      },
+    ]
+
+    const resp = await model.generateContent({ contents })
+    return resp.response.text()
+  } catch (err: any) {
+    const msg = err?.error?.message || err?.message || String(err)
+    if (/NOT_FOUND|Requested entity was not found|404/i.test(msg)) {
+      throw new Error(
+        `Gemini model "${modelId}" not found or unavailable for this API key.`
+      )
     }
-    if (data?.output?.[0]?.content) return data.output[0].content
-  } catch (e) {
-    // fallthrough
+    throw new Error(`Gemini generation failed: ${msg}`)
   }
-
-  return JSON.stringify(data)
 }
-
-export default generateWithGemini

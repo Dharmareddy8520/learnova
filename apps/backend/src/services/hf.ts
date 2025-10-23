@@ -132,74 +132,23 @@ export async function generateQuiz(text: string, count = 5) {
   // Use HF models that are generally available on the inference API; avoid models that commonly 404.
   const defaults = [configured, 'google/flan-t5-large', 'sshleifer/distilbart-cnn-12-6', 'facebook/bart-large-cnn']
   const models = defaults.filter(Boolean) as string[]
-  const clean = redactSensitive(text)
-  const example = `[START OF EXAMPLE]\nContext: The Moon is Earth's only natural satellite. It is the fifth largest satellite in the Solar System. The dark areas on its surface are called maria.\nQuiz:\nQ: What is the Moon's status relative to Earth?\nA) A man-made satellite\nB) A natural satellite\nC) A dwarf planet\nD) A star\nAnswer: B\nQ: The dark areas on the Moon's surface are known as what?\nA) Craters\nB) Valleys\nC) Maria\nD) Highlands\nAnswer: C\n[END OF EXAMPLE]`
+    const clean = redactSensitive(text);
+    const prompt = `You are an intelligent quiz generator.\n\nAnalyze the following text and generate ${count} multiple-choice questions (MCQs).\nEach question should test the user's understanding of the text, not memorization.\nReturn the output in pure JSON format.\n\nRules:\n- Each question must have exactly 4 options.\n- Include the correct answer text in \"answer\".\n- Do NOT include explanations.\n\nText:\n\"\"\"${clean}\"\"\"\nFormat:\n[\n  {\n    \"question\": \"...\",\n    \"options\": [\"A\", \"B\", \"C\", \"D\"],\n    \"answer\": \"...\"\n  }\n]\n`;
 
-  const prompt = `${example}\n\n[START OF TASK]\nContext: ${clean}\n\nGenerate exactly ${count} multiple-choice questions in the same format. Each question must have 4 options (A-D) and indicate the correct Answer.\n\nQuiz:`
-  const payload = { inputs: prompt, parameters: { max_new_tokens: 700, temperature: 0.0 } }
-
-  const { out, model } = await tryModels(models, payload)
-  let raw = parseModelOutput(out)
-
-  // Try to parse JSON. If it fails, ask model to coerce output into valid JSON once.
-  try {
-    return JSON.parse(raw)
-  } catch (e) {
-    try {
-      const coerced = await coerceJson(model, raw)
-      return JSON.parse(coerced)
-    } catch (e2) {
-      // If HF failed completely and Gemini is configured, try Gemini as a fallback
-      if (process.env.GEMINI_API_KEY) {
-        try {
-          const geminiOut = await generateWithGemini('gemini-1.5-flash', prompt)
-            // geminiOut likely returns a string; try to parse JSON first
-            try { return JSON.parse(geminiOut) } catch {}
-
-            // Try to parse QA formatted output (Q:, A) ..., Answer: X)
-            const parseQAFormat = (rawText: string) => {
-              if (!rawText) return null
-              const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
-              const items: any[] = []
-              let i = 0
-              while (i < lines.length) {
-                const line = lines[i]
-                if (!/^Q:/i.test(line)) { i++; continue }
-                const question = line.replace(/^Q:\s*/i, '').trim()
-                i++
-                const choices: string[] = []
-                while (i < lines.length && choices.length < 4) {
-                  const m = lines[i].match(/^([A-D])\)\s*(.*)$/i)
-                  if (m) { choices.push(m[2].trim()); i++; continue }
-                  break
-                }
-                let answerIndex = -1
-                if (i < lines.length && /^Answer:/i.test(lines[i])) {
-                  const a = lines[i].replace(/^Answer:\s*/i, '').trim()
-                  const idx = ['A','B','C','D'].indexOf(a.toUpperCase())
-                  answerIndex = idx >= 0 ? idx : -1
-                  i++
-                }
-                if (question && choices.length === 4 && answerIndex >= 0) {
-                  items.push({ question, choices, answerIndex })
-                }
-              }
-              return items.length ? items : null
-            }
-
-            const parsed = parseQAFormat(geminiOut)
-            if (parsed) return parsed
-            return geminiOut
-        } catch (gErr: any) {
-          // final fallback: return raw HF output
-          console.warn('Gemini fallback failed', gErr?.message || gErr)
-          return raw
-        }
-      }
-      // Last resort: return raw string so frontend can show it
-      return raw
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error('GEMINI_API_KEY not configured');
     }
-  }
+    try {
+    const geminiOut = await generateWithGemini('gemini-pro', prompt);
+      try {
+        return JSON.parse(geminiOut);
+      } catch {
+        return geminiOut;
+      }
+    } catch (gErr: any) {
+      console.warn('Gemini quiz generation failed', gErr?.message || gErr);
+      throw new Error('Quiz generation failed with Gemini');
+    }
 }
 
 export async function generateFlashcards(text: string, count = 10) {

@@ -17,8 +17,8 @@ const MLTools: React.FC = () => {
     setQuizResult(null)
     setCards(null)
     try {
-      const out = await summarize(text)
-      setSummary(out.summary || String(out))
+  const out = await summarize(text)
+  setSummary(out.summary || String(out))
     } catch (e: any) {
       setSummary(`Error: ${e.message}`)
     } finally { setLoading(false) }
@@ -29,8 +29,8 @@ const MLTools: React.FC = () => {
     setSummary(null)
     setCards(null)
     try {
-      const out = await quiz(text, quizCount)
-      setQuizResult(out.quiz || out)
+  const out = await quiz(text, quizCount)
+  setQuizResult(out.quiz || out)
     } catch (e: any) {
       setQuizResult({ error: e.message })
     } finally { setLoading(false) }
@@ -41,8 +41,8 @@ const MLTools: React.FC = () => {
     setSummary(null)
     setQuizResult(null)
     try {
-      const out = await flashcards(text, flashCount)
-      setCards(out.flashcards || out)
+  const out = await flashcards(text, flashCount)
+  setCards(out.flashcards || out)
     } catch (e: any) {
       setCards({ error: e.message })
     } finally { setLoading(false) }

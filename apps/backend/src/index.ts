@@ -46,7 +46,9 @@ app.use(session({
   saveUninitialized: false,
   store: MongoStore.create({
     mongoUrl: process.env.MONGO_URI || 'mongodb://localhost:27017/learnova',
-    touchAfter: 24 * 3600 // lazy session update
+    touchAfter: 24 * 3600, // lazy session update
+    // Set TTL for sessions in seconds (e.g., 30 days)
+    ttl: Number(process.env.SESSION_TTL_SECONDS || String(60 * 60 * 24 * 30)),
   }),
   cookie: {
     secure: process.env.NODE_ENV === 'production',
@@ -55,8 +57,13 @@ app.use(session({
     // the frontend is hosted on a separate origin (Vercel) and we rely on
     // cookies to be sent for authentication. Locally use 'lax' for safety.
     sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-    maxAge: 1000 * 60 * 60 * 24 * 7 // 7 days
+    // Make sessions last longer by default (30 days)
+    maxAge: Number(process.env.SESSION_MAX_AGE_MS || String(1000 * 60 * 60 * 24 * 30)),
+    // Refresh the session expiration on each response
+    // Note: express-session's 'rolling' option is set below
   }
+  ,
+  rolling: true,
 }));
 
 // Passport middleware
@@ -70,7 +77,8 @@ configurePassport();
 app.use('/api/auth', authRoutes);
 app.use('/api/user', isAuthenticated, userRoutes);
 app.use('/api/dashboard', isAuthenticated, dashboardRoutes);
-app.use('/api/ml', mlRoutes);
+// Mount ML routes at /api so endpoints are available as /api/summarize, /api/quiz/generate, etc.
+app.use('/api', mlRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

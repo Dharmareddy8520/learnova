@@ -1,1 +1,27 @@
 https://learnova-srwb.onrender.com/api/auth/google/callback
+
+
+http://localhost:3001/api/summarize
+{
+  "text": "USA Cricket began the weekend by publishing a lengthy essay that blamed its commercial partner, American Cricket Enterprises (ACE), for years of strain and defended the board's decision to cut ties. The piece, headlined \"A Difficult Chapter for USA Cricket,\" cast the ICC's September 23 suspension as a tough but temporary stumble and presented the termination of ACE's agreement as a principled stand."
+}
+
+
+http://localhost:3001/api/qa
+{
+  "context": "USA Cricket began the weekend by publishing a lengthy essay that blamed its commercial partner, American Cricket Enterprises (ACE), for years of strain and defended the board's decision to cut ties.",
+  "question": "Who did USA Cricket blame in the essay?"
+}
+
+
+http://localhost:3001/api/quiz/generate
+{
+  "text": "USA Cricket began the weekend by publishing a lengthy essay that blamed its commercial partner, American Cricket Enterprises (ACE), for years of strain and defended the board's decision to cut ties. The piece, headlined \"A Difficult Chapter for USA Cricket,\" cast the ICC's September 23 suspension as a tough but temporary stumble and presented the termination of ACE's agreement as a principled stand.",
+  "numQuestions": 2
+}
+
+http://localhost:3001/api/flashcards/generate
+{
+  "text": "USA Cricket began the weekend by publishing a lengthy essay that blamed its commercial partner, American Cricket Enterprises (ACE), for years of strain and defended the board's decision to cut ties. The piece, headlined \"A Difficult Chapter for USA Cricket,\" cast the ICC's September 23 suspension as a tough but temporary stumble and presented the termination of ACE's agreement as a principled stand.",
+  "numFlashcards": 2
+}
