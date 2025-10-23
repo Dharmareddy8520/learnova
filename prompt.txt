@@ -1,0 +1,408 @@
+Project: Learnova — AI Personal Knowledge Companion
+Goal: Build Learnova step-by-step using React (TypeScript) frontend and Node.js + Express (TypeScript) backend. Use MongoDB as the primary datastore and file store (GridFS). Use Agenda (Mongo-backed) for background jobs (MCP). Firebase may be provided as an optional alternative for file storage or auth — document how to switch. Do NOT use Docker or S3.
+
+OVERVIEW / MUST-HAVES
+- DB: MongoDB (primary). Use GridFS for document storage. Optionally support Firebase Storage as a toggle. All metadata in Mongo.
+- Background worker: Agenda (Mongo-backed) as default MCP server for processing jobs. Provide instructions for running worker process.
+- Auth: Email/password + OAuth (Google, GitHub) via Passport.js. Maintain server-side sessions persisted in Mongo via connect-mongo (HttpOnly secure cookies).
+- First workflow (priority 0): Landing page -> Signup/Login (email or OAuth) -> After login redirect to Dashboard showing progress and consecutive day count.
+- Core features (available after auth, some behind Stripe premium):
+  • Paste text to summarize (fast sync)
+  • Document upload + parsing & chunking (PDF, DOCX)
+  • Adaptive summaries + context-aware Q&A
+  • Auto-generated flashcards and quizzes
+  • Stripe payments for premium features
+- No Docker. All run locally via npm/yarn scripts. Provide clear run instructions and .env.example.
+
+TECH STACK (required)
+Frontend:
+- React + TypeScript + Vite
+- Tailwind CSS
+- react-router, react-query
+- shadcn/ui + lucide-react optional
+
+Backend:
+- Node.js >=18 + TypeScript
+- Express.js
+- MongoDB + Mongoose, GridFS for file blobs
+- connect-mongo for session store
+- Passport.js with local + Google + GitHub strategies
+- Agenda for job scheduling/worker (MCP)
+- OpenAI for LLM/embeddings (pluggable)
+- Vector store abstraction: primary = OpenAI embeddings stored in Mongo (vectors collection) with approximate search (or use Pinecone if configured)
+- Stripe for payments
+- Validation via zod or Joi
+- Testing: Jest + Supertest for backend; Vitest + RTL for frontend
+
+ENVIRONMENT VARIABLES (.env.example)
+MONGO_URI
+SESSION_SECRET
+JWT_SECRET (if used)
+OPENAI_API_KEY
+PINECONE_API_KEY (optional)
+STRIPE_SECRET_KEY
+STRIPE_WEBHOOK_SECRET
+FIREBASE_SERVICE_ACCOUNT_JSON (optional)
+FRONTEND_URL
+BACKEND_URL
+NODE_ENV
+
+MONGODB COLLECTIONS (high-level)
+users { _id, name, email, passwordHash, role, oauthProviders, startedAt, lastActiveAt, consecutiveDays, createdAt }
+sessions (connect-mongo)
+documents { _id, userId, filename, gridFsId, size, mimeType, status, uploadedAt, processedAt, visibility }
+docChunks { _id, documentId, chunkText, chunkOrder, embedding: [float], embeddingMeta }
+summaries { _id, documentId, summaryText, lengthLabel, createdAt }
+flashcards { _id, documentId, question, answer, difficulty, createdAt }
+quizzes { _id, documentId, questions: JSON, createdAt }
+progress { _id, userId, documentId, flashcardStats, quizStats, lastStudiedAt }
+payments { _id, userId, stripeSessionId, status, plan, createdAt }
+agendaJobs (Agenda-managed jobs stored in Mongo)
+
+API SURFACE (minimal, include validation & sample responses)
+Auth
+POST /api/auth/register
+POST /api/auth/login  -> sets session cookie
+GET /api/auth/logout
+GET /api/auth/oauth/google -> redirect
+GET /api/auth/oauth/google/callback
+GET /api/auth/oauth/github -> redirect
+GET /api/auth/oauth/github/callback
+
+User
+GET /api/user/me -> { user, progressSummary }
+PUT /api/user/preferences
+
+Documents & Paste
+POST /api/documents/upload (multipart) -> { success, documentId, status:PENDING }
+POST /api/documents/paste -> { success, summary }
+GET /api/documents/:id -> metadata
+GET /api/documents/:id/summary -> { summary }
+GET /api/documents/:id/flashcards -> [ flashcards ]
+GET /api/documents/:id/quizzes -> [ quiz ]
+POST /api/documents/:id/query -> { answer }  // context-aware Q&A
+
+Processing & Jobs
+POST /api/processing/:id/force -> re-enqueue processing job
+GET /api/jobs/:id -> job status
+
+Search / Embeddings
+GET /api/search?q=... -> list of similar chunks/docs
+
+Dashboard / Progress
+GET /api/dashboard -> { recentDocs, progressData, consecutiveDays, recommendations }
+POST /api/progress/flashcard/:id -> record attempt
+
+Payments (Stripe)
+POST /api/payments/create-checkout-session -> { url }
+POST /api/payments/webhook -> Stripe events handled, update user role
+
+FRONTEND PAGES & REQUIRED FIRST-WORKFLOW
+Implement in this order (priority):
+1) Landing page (public)
+   - Feature bullets + CTA -> /signup
+   - Basic responsive design with Tailwind
+2) Signup & Login pages
+   - Email/password forms with client validation
+   - OAuth buttons (Google/GitHub) that hit backend endpoints
+3) Dashboard (authenticated)
+   - Show user name, consecutiveDays (streak), recent documents (if any), quick paste-summarize box, payment status
+   - Consecutive days: backend updates lastActiveAt on each successful login/use; compute streak and return in /api/dashboard
+4) Paste-to-summarize widget (on dashboard)
+   - POST /api/documents/paste, display summary inline
+
+BACKGROUND WORKER (Agenda + Mongo)
+- Implement Agenda worker as separate process (e.g., `node dist/worker.js`).
+- Job types: parse-document, chunk-document, compute-embeddings, generate-summary, generate-flashcards
+- Worker should update document status fields and write outputs to collections.
+
+DOCUMENT STORAGE
+- Use GridFS to store uploaded files. Store metadata in documents collection with gridFsId.
+- Optionally: if FIREBASE credentials present, allow storing a copy in Firebase Storage and record the firebase URL (documented toggle).
+
+VECTOR STORE / EMBEDDINGS
+- Default flow: call OpenAI embeddings for chunks, store vectors in `docChunks.embedding` (array of floats) and in a `vectors` collection to support approximate search via cosine similarity using an npm ANN library (or simple brute-force for MVP).
+- Provide abstraction so that if PINECONE_API_KEY provided, the system indexes vectors in Pinecone instead.
+
+PAYMENTS
+- Use Stripe Checkout for purchases. Protect heavy processing features (e.g., number of pages processed per month) behind premium plan enforced by backend checks.
+
+STEP-BY-STEP BUILD PLAN (Cursor must follow exactly)
+Work in small, testable steps. For each step: create files, show file list, paste important file contents, provide commands to run, add tests, and commit message. Do not proceed to the next step until Step acceptance criteria are satisfied.
+
+Step 1 — Project skeleton + Landing + Auth (MANDATORY FIRST)
+- Create monorepo or two folders: /apps/frontend and /apps/backend.
+- Frontend:
+  • Vite + React + TypeScript + Tailwind; implement Landing, Signup, Login, protected Dashboard route.
+  • Implement OAuth buttons that call backend endpoints (show stubbed UI flows if OAuth keys absent).
+- Backend:
+  • Express + TypeScript scaffold, connect to MongoDB (MONGO_URI).
+  • Sessions with express-session + connect-mongo.
+  • Passport.js local + Google + GitHub (provide dev-stub mode if OAuth keys missing).
+  • POST /api/auth/register and POST /api/auth/login (bcrypt + session create).
+  • Middleware: isAuthenticated to protect routes.
+  • GET /api/dashboard returns { recentDocs:[], progressData:{}, consecutiveDays: computed }.
+- Tests:
+  • Backend unit tests: register/login happy path and auth middleware.
+  • Frontend: basic render tests for Landing, Signup, Login.
+- Deliverable: user can sign up (email) or use OAuth stub, login, and see Dashboard with consecutiveDays (initially 0 or 1). Provide README with exact setup and run commands. Commit message example: "feat(init): scaffold frontend and backend + auth and landing page"
+
+Step 2 — Dashboard internals + streak logic
+- Backend: implement consecutiveDays logic (store startedAt and lastActiveAt; update on login or dashboard fetch).
+- Frontend: Dashboard shows consecutiveDays and a card for Quick Paste.
+- Tests: unit tests for streak computation.
+- Deliverable: streak increments on simulated daily use.
+
+Step 3 — Paste-text summarizer (sync)
+- Backend: implement POST /api/documents/paste; validate input; call OpenAI (or mock) to return summary; save summary in summaries collection.
+- Frontend: paste UI on Dashboard to call endpoint and display summary.
+- Tests: mock OpenAI responses.
+
+Step 4 — Document upload + Agenda job enqueue
+- Backend: POST /api/documents/upload; store file to GridFS; create doc record status=PENDING; create Agenda job `parse-document`.
+- Worker: Agenda job `parse-document` downloads file from GridFS, parses (pdf-parse/mammoth), chunks, inserts docChunks, enqueues `compute-embeddings`.
+- Frontend: upload page with progress, list documents and statuses.
+- Tests: API upload tests (mock GridFS).
+
+Step 5 — Embeddings + vector search
+- Worker: compute embeddings using OpenAI for chunks, store embedding arrays in docChunks or `vectors` collection.
+- Implement GET /api/search and POST /api/documents/:id/query using similarity search + LLM answer composition.
+- Tests: mock embeddings provider and vector search.
+
+Step 6 — Summaries, flashcards, quizzes generation
+- Worker: generate adaptive summary and flashcards/quizzes using prompt templates; store results.
+- Frontend: document viewer renders summary, flashcards, quiz.
+- Tests: end-to-end simulation with mocked LLM.
+
+Step 7 — Stripe integration
+- Backend: create-checkout-session + webhook handler; update payments collection and user.role.
+- Frontend: payment CTA and redirect to Stripe.
+- Tests: webhook handling tests (simulate stripe event).
+
+Step 8 — Study mode & spaced repetition
+- Backend: endpoints to record flashcard attempts and compute next review time (simplified SM-2).
+- Frontend: study UI to flip flashcards and record correct/incorrect.
+- Deliverable: study sessions persisted.
+
+Step 9 — Tests & QA
+- Achieve reasonable coverage for core modules.
+- Provide instructions to run tests.
+
+Step 10 — Polish & Documentation
+- README, .env.example, instructions for running worker, toggling Firebase fallback, switching to Pinecone.
+- OpenAPI or clear endpoint docs.
+
+ACCEPTANCE CRITERIA (per step)
+- Step 1 acceptance: Landing + Signup/Login (email or OAuth stub) -> Dashboard with consecutiveDays visible. Backend tests for auth pass. Frontend build succeeds.
+- Each subsequent step: unit tests added & passing; endpoints documented; front-end integration works.
+
+ADDITIONAL GUIDELINES
+- Use TypeScript everywhere.
+- Keep commits small; provide commit messages.
+- Provide a pluggable provider pattern for embeddings and vector index.
+- Provide safe fallback mocks when external keys are absent.
+- Prioritize security: hashed passwords, secure cookies, input validati
+Project: Learnova — AI Personal Knowledge Companion
+Goal: Build Learnova step-by-step using React (TypeScript) frontend and Node.js + Express (TypeScript) backend. Use MongoDB as the primary datastore and file store (GridFS). Use Agenda (Mongo-backed) for background jobs (MCP). Firebase may be provided as an optional alternative for file storage or auth — document how to switch. Do NOT use Docker or S3.
+
+OVERVIEW / MUST-HAVES
+- DB: MongoDB (primary). Use GridFS for document storage. Optionally support Firebase Storage as a toggle. All metadata in Mongo.
+- Background worker: Agenda (Mongo-backed) as default MCP server for processing jobs. Provide instructions for running worker process.
+- Auth: Email/password + OAuth (Google, GitHub) via Passport.js. Maintain server-side sessions persisted in Mongo via connect-mongo (HttpOnly secure cookies).
+- First workflow (priority 0): Landing page -> Signup/Login (email or OAuth) -> After login redirect to Dashboard showing progress and consecutive day count.
+- Core features (available after auth, some behind Stripe premium):
+  • Paste text to summarize (fast sync)
+  • Document upload + parsing & chunking (PDF, DOCX)
+  • Adaptive summaries + context-aware Q&A
+  • Auto-generated flashcards and quizzes
+  • Stripe payments for premium features
+- No Docker. All run locally via npm/yarn scripts. Provide clear run instructions and .env.example.
+
+TECH STACK (required)
+Frontend:
+- React + TypeScript + Vite
+- Tailwind CSS
+- react-router, react-query
+- shadcn/ui + lucide-react optional
+
+Backend:
+- Node.js >=18 + TypeScript
+- Express.js
+- MongoDB + Mongoose, GridFS for file blobs
+- connect-mongo for session store
+- Passport.js with local + Google + GitHub strategies
+- Agenda for job scheduling/worker (MCP)
+- OpenAI for LLM/embeddings (pluggable)
+- Vector store abstraction: primary = OpenAI embeddings stored in Mongo (vectors collection) with approximate search (or use Pinecone if configured)
+- Stripe for payments
+- Validation via zod or Joi
+- Testing: Jest + Supertest for backend; Vitest + RTL for frontend
+
+ENVIRONMENT VARIABLES (.env.example)
+MONGO_URI
+SESSION_SECRET
+JWT_SECRET (if used)
+OPENAI_API_KEY
+PINECONE_API_KEY (optional)
+STRIPE_SECRET_KEY
+STRIPE_WEBHOOK_SECRET
+FIREBASE_SERVICE_ACCOUNT_JSON (optional)
+FRONTEND_URL
+BACKEND_URL
+NODE_ENV
+
+MONGODB COLLECTIONS (high-level)
+users { _id, name, email, passwordHash, role, oauthProviders, startedAt, lastActiveAt, consecutiveDays, createdAt }
+sessions (connect-mongo)
+documents { _id, userId, filename, gridFsId, size, mimeType, status, uploadedAt, processedAt, visibility }
+docChunks { _id, documentId, chunkText, chunkOrder, embedding: [float], embeddingMeta }
+summaries { _id, documentId, summaryText, lengthLabel, createdAt }
+flashcards { _id, documentId, question, answer, difficulty, createdAt }
+quizzes { _id, documentId, questions: JSON, createdAt }
+progress { _id, userId, documentId, flashcardStats, quizStats, lastStudiedAt }
+payments { _id, userId, stripeSessionId, status, plan, createdAt }
+agendaJobs (Agenda-managed jobs stored in Mongo)
+
+API SURFACE (minimal, include validation & sample responses)
+Auth
+POST /api/auth/register
+POST /api/auth/login  -> sets session cookie
+GET /api/auth/logout
+GET /api/auth/oauth/google -> redirect
+GET /api/auth/oauth/google/callback
+GET /api/auth/oauth/github -> redirect
+GET /api/auth/oauth/github/callback
+
+User
+GET /api/user/me -> { user, progressSummary }
+PUT /api/user/preferences
+
+Documents & Paste
+POST /api/documents/upload (multipart) -> { success, documentId, status:PENDING }
+POST /api/documents/paste -> { success, summary }
+GET /api/documents/:id -> metadata
+GET /api/documents/:id/summary -> { summary }
+GET /api/documents/:id/flashcards -> [ flashcards ]
+GET /api/documents/:id/quizzes -> [ quiz ]
+POST /api/documents/:id/query -> { answer }  // context-aware Q&A
+
+Processing & Jobs
+POST /api/processing/:id/force -> re-enqueue processing job
+GET /api/jobs/:id -> job status
+
+Search / Embeddings
+GET /api/search?q=... -> list of similar chunks/docs
+
+Dashboard / Progress
+GET /api/dashboard -> { recentDocs, progressData, consecutiveDays, recommendations }
+POST /api/progress/flashcard/:id -> record attempt
+
+Payments (Stripe)
+POST /api/payments/create-checkout-session -> { url }
+POST /api/payments/webhook -> Stripe events handled, update user role
+
+FRONTEND PAGES & REQUIRED FIRST-WORKFLOW
+Implement in this order (priority):
+1) Landing page (public)
+   - Feature bullets + CTA -> /signup
+   - Basic responsive design with Tailwind
+2) Signup & Login pages
+   - Email/password forms with client validation
+   - OAuth buttons (Google/GitHub) that hit backend endpoints
+3) Dashboard (authenticated)
+   - Show user name, consecutiveDays (streak), recent documents (if any), quick paste-summarize box, payment status
+   - Consecutive days: backend updates lastActiveAt on each successful login/use; compute streak and return in /api/dashboard
+4) Paste-to-summarize widget (on dashboard)
+   - POST /api/documents/paste, display summary inline
+
+BACKGROUND WORKER (Agenda + Mongo)
+- Implement Agenda worker as separate process (e.g., `node dist/worker.js`).
+- Job types: parse-document, chunk-document, compute-embeddings, generate-summary, generate-flashcards
+- Worker should update document status fields and write outputs to collections.
+
+DOCUMENT STORAGE
+- Use GridFS to store uploaded files. Store metadata in documents collection with gridFsId.
+- Optionally: if FIREBASE credentials present, allow storing a copy in Firebase Storage and record the firebase URL (documented toggle).
+
+VECTOR STORE / EMBEDDINGS
+- Default flow: call OpenAI embeddings for chunks, store vectors in `docChunks.embedding` (array of floats) and in a `vectors` collection to support approximate search via cosine similarity using an npm ANN library (or simple brute-force for MVP).
+- Provide abstraction so that if PINECONE_API_KEY provided, the system indexes vectors in Pinecone instead.
+
+PAYMENTS
+- Use Stripe Checkout for purchases. Protect heavy processing features (e.g., number of pages processed per month) behind premium plan enforced by backend checks.
+
+STEP-BY-STEP BUILD PLAN (Cursor must follow exactly)
+Work in small, testable steps. For each step: create files, show file list, paste important file contents, provide commands to run, add tests, and commit message. Do not proceed to the next step until Step acceptance criteria are satisfied.
+
+Step 1 — Project skeleton + Landing + Auth (MANDATORY FIRST)
+- Create monorepo or two folders: /apps/frontend and /apps/backend.
+- Frontend:
+  • Vite + React + TypeScript + Tailwind; implement Landing, Signup, Login, protected Dashboard route.
+  • Implement OAuth buttons that call backend endpoints (show stubbed UI flows if OAuth keys absent).
+- Backend:
+  • Express + TypeScript scaffold, connect to MongoDB (MONGO_URI).
+  • Sessions with express-session + connect-mongo.
+  • Passport.js local + Google + GitHub (provide dev-stub mode if OAuth keys missing).
+  • POST /api/auth/register and POST /api/auth/login (bcrypt + session create).
+  • Middleware: isAuthenticated to protect routes.
+  • GET /api/dashboard returns { recentDocs:[], progressData:{}, consecutiveDays: computed }.
+- Tests:
+  • Backend unit tests: register/login happy path and auth middleware.
+  • Frontend: basic render tests for Landing, Signup, Login.
+- Deliverable: user can sign up (email) or use OAuth stub, login, and see Dashboard with consecutiveDays (initially 0 or 1). Provide README with exact setup and run commands. Commit message example: "feat(init): scaffold frontend and backend + auth and landing page"
+
+Step 2 — Dashboard internals + streak logic
+- Backend: implement consecutiveDays logic (store startedAt and lastActiveAt; update on login or dashboard fetch).
+- Frontend: Dashboard shows consecutiveDays and a card for Quick Paste.
+- Tests: unit tests for streak computation.
+- Deliverable: streak increments on simulated daily use.
+
+Step 3 — Paste-text summarizer (sync)
+- Backend: implement POST /api/documents/paste; validate input; call OpenAI (or mock) to return summary; save summary in summaries collection.
+- Frontend: paste UI on Dashboard to call endpoint and display summary.
+- Tests: mock OpenAI responses.
+
+Step 4 — Document upload + Agenda job enqueue
+- Backend: POST /api/documents/upload; store file to GridFS; create doc record status=PENDING; create Agenda job `parse-document`.
+- Worker: Agenda job `parse-document` downloads file from GridFS, parses (pdf-parse/mammoth), chunks, inserts docChunks, enqueues `compute-embeddings`.
+- Frontend: upload page with progress, list documents and statuses.
+- Tests: API upload tests (mock GridFS).
+
+Step 5 — Embeddings + vector search
+- Worker: compute embeddings using OpenAI for chunks, store embedding arrays in docChunks or `vectors` collection.
+- Implement GET /api/search and POST /api/documents/:id/query using similarity search + LLM answer composition.
+- Tests: mock embeddings provider and vector search.
+
+Step 6 — Summaries, flashcards, quizzes generation
+- Worker: generate adaptive summary and flashcards/quizzes using prompt templates; store results.
+- Frontend: document viewer renders summary, flashcards, quiz.
+- Tests: end-to-end simulation with mocked LLM.
+
+Step 7 — Stripe integration
+- Backend: create-checkout-session + webhook handler; update payments collection and user.role.
+- Frontend: payment CTA and redirect to Stripe.
+- Tests: webhook handling tests (simulate stripe event).
+
+Step 8 — Study mode & spaced repetition
+- Backend: endpoints to record flashcard attempts and compute next review time (simplified SM-2).
+- Frontend: study UI to flip flashcards and record correct/incorrect.
+- Deliverable: study sessions persisted.
+
+Step 9 — Tests & QA
+- Achieve reasonable coverage for core modules.
+- Provide instructions to run tests.
+
+Step 10 — Polish & Documentation
+- README, .env.example, instructions for running worker, toggling Firebase fallback, switching to Pinecone.
+- OpenAPI or clear endpoint docs.
+
+ACCEPTANCE CRITERIA (per step)
+- Step 1 acceptance: Landing + Signup/Login (email or OAuth stub) -> Dashboard with consecutiveDays visible. Backend tests for auth pass. Frontend build succeeds.
+- Each subsequent step: unit tests added & passing; endpoints documented; front-end integration works.
+
+ADDITIONAL GUIDELINES
+- Use TypeScript everywhere.
+- Keep commits small; provide commit messages.
+- Provide a pluggable provider pattern for embeddings and vector index.
+- Provide safe fallback mocks when external keys are absent.
+- Prioritize security: hashed passwords, secure cookies, input validati
