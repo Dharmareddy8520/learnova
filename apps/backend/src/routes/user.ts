@@ -51,4 +51,33 @@ router.put('/preferences', async (req: Request, res: Response) => {
   }
 });
 
+// Update user profile except name and email
+router.put('/update', async (req: Request, res: Response) => {
+  try {
+    const user = req.user;
+
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+
+    const { avatarUrl, timezone, studyGoalPerDay, theme, notifyReminders, notifyProduct } = req.body;
+
+    // Update user fields except name and email
+    user.avatarUrl = avatarUrl || user.avatarUrl;
+    user.timezone = timezone || user.timezone;
+    user.studyGoalPerDay = studyGoalPerDay || user.studyGoalPerDay;
+    user.theme = theme || user.theme;
+    user.notifyReminders = notifyReminders !== undefined ? notifyReminders : user.notifyReminders;
+    user.notifyProduct = notifyProduct !== undefined ? notifyProduct : user.notifyProduct;
+
+    // Save the updated user
+    await user.save();
+
+    res.json({ success: true, message: 'Profile updated successfully.' });
+  } catch (error) {
+    console.error('Update profile error:', error);
+    res.status(500).json({ error: 'Failed to update profile.' });
+  }
+});
+
 export default router;

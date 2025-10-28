@@ -1,10 +1,8 @@
 // src/pages/QuizGenerator.tsx
 import { useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
-import { useNavigate } from 'react-router-dom'
-import {
-  Home, Brain, BookOpen, User, Play, RotateCcw, ChevronRight
-} from 'lucide-react'
+import { Play, RotateCcw, ChevronRight } from 'lucide-react'
+import AppSidebar from '../components/AppSidebar' // <-- use your working sidebar
 
 type Question = {
   question: string
@@ -330,7 +328,6 @@ const QuizGenerator = () => {
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [started, setStarted] = useState(false)
-  const navigate = useNavigate()
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
@@ -348,7 +345,6 @@ const QuizGenerator = () => {
       const payload = {
         text: formData.text,
         numQuestions: Number(formData.numQuestions) || 1,
-        // difficulty not used by backend yet — keep in payload if you later support it
       }
       const response = await axios.post('/api/quiz/generate', payload)
       const raw = response.data.quiz ?? response.data
@@ -371,7 +367,7 @@ const QuizGenerator = () => {
   const header = useMemo(
     () => (
       <div className="flex items-center gap-3 mb-4">
-        <h1 className="text-3xl font-bold text-indigo-700">✨ Quiz Generator</h1>
+        <h1 className="text-3xl font-bold text-indigo-700 py-5 my-5">✨ Quiz Generator</h1>
         {started && (
           <span className="ml-2 text-xs rounded-full bg-indigo-50 text-indigo-700 px-2 py-1 ring-1 ring-indigo-200">
             Interactive mode
@@ -383,124 +379,100 @@ const QuizGenerator = () => {
   )
 
   return (
-    <div className="container mx-auto p-4">
-      {/* Sidebar */}
-      <div className="fixed top-0 left-0 h-full w-16 bg-gray-900 shadow-md z-10 overflow-y-auto hidden md:block">
-        <div className="flex flex-col items-center py-4 h-full">
-          <div className="mb-6">
-            <img src="/logo.png" alt="Logo" className="h-8 w-8" />
-          </div>
-          <ul className="space-y-6">
-            <li>
-              <button className="text-gray-400 hover:text-white" onClick={() => navigate('/dashboard')}>
-                <Home className="h-6 w-6" />
+    <div className="min-h-screen bg-gray-50">
+      {/* Global app sidebar (mobile drawer + desktop rail) */}
+      <AppSidebar />
+
+      {/* Content area: adjust padding to avoid overlap with the sidebar bars */}
+      {/* If your desktop rail is w-64, keep md:ml-64. If it's w-16, change to md:ml-16 */}
+      <main className="pt-14 pb-14 md:pt-0 md:pb-0 md:ml-64 px-4 md:px-8">
+        {header}
+
+        {!started ? (
+          <form
+            onSubmit={handleSubmit}
+            className="space-y-6 rounded-2xl border border-gray-100 bg-white/70 backdrop-blur-sm p-6 shadow-md"
+          >
+            {/* Source text */}
+            <div className={ui.field}>
+              <label htmlFor="text" className={ui.label}>
+                Source Text
+              </label>
+              <textarea
+                id="text"
+                name="text"
+                value={formData.text}
+                onChange={handleChange}
+                rows={6}
+                placeholder="Paste or write the content you want a quiz for..."
+                className={ui.textarea}
+              />
+            </div>
+
+            {/* Number of Questions */}
+            <div className={ui.field}>
+              <label htmlFor="numQuestions" className={ui.label}>
+                Number of Questions (1–25)
+              </label>
+              <input
+                id="numQuestions"
+                name="numQuestions"
+                type="number"
+                min={1}
+                max={25}
+                value={formData.numQuestions}
+                onChange={handleChange}
+                placeholder="e.g. 5"
+                className={ui.input}
+              />
+            </div>
+
+            {/* Difficulty */}
+            <div className={ui.field}>
+              <label htmlFor="difficulty" className={ui.label}>
+                Difficulty
+              </label>
+              <select
+                id="difficulty"
+                name="difficulty"
+                value={formData.difficulty}
+                onChange={handleChange}
+                className={ui.select}
+              >
+                <option value="easy">Easy</option>
+                <option value="medium">Medium</option>
+                <option value="hard">Hard</option>
+              </select>
+            </div>
+
+            {/* Buttons */}
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="submit"
+                disabled={isLoading}
+                className={`${ui.btn} ${ui.primary} px-6 py-2.5 text-white`}
+              >
+                {isLoading ? '✨ Generating…' : 'Generate Quiz'}
               </button>
-            </li>
-            <li>
-              <button className="text-gray-400 hover:text-white" onClick={() => navigate('/quiz-generator')}>
-                <Brain className="h-6 w-6" />
+
+              <button
+                type="button"
+                onClick={() => setFormData({ text: '', numQuestions: 5, difficulty: 'medium' })}
+                className={`${ui.btn} ${ui.ghost} px-6 py-2.5`}
+              >
+                <RotateCcw className="h-4 w-4" />
+                Reset
               </button>
-            </li>
-            <li>
-              <button className="text-gray-400 hover:text-white" onClick={() => navigate('/flashcards')}>
-                <BookOpen className="h-6 w-6" />
-              </button>
-            </li>
-          </ul>
-          <div className="mt-auto">
-            <button className="text-gray-400 hover:text-white" onClick={() => navigate('/account')}>
-              <User className="h-6 w-6" />
-            </button>
+            </div>
+
+            {error && <p className="text-red-600">{error}</p>}
+          </form>
+        ) : (
+          <div className="mt-4">
+            {quiz && <QuizPlayer quiz={quiz} onRestart={onRestart} />}
           </div>
-        </div>
-      </div>
-
-      {header}
-
-      {!started ? (
-        <form
-          onSubmit={handleSubmit}
-          className="space-y-6 rounded-2xl border border-gray-100 bg-white/70 backdrop-blur-sm p-6 shadow-md"
-        >
-          {/* Source text */}
-          <div className={ui.field}>
-            <label htmlFor="text" className={ui.label}>
-              Source Text
-            </label>
-            <textarea
-              id="text"
-              name="text"
-              value={formData.text}
-              onChange={handleChange}
-              rows={6}
-              placeholder="Paste or write the content you want a quiz for..."
-              className={ui.textarea}
-            />
-          </div>
-
-          {/* Number of Questions */}
-          <div className={ui.field}>
-            <label htmlFor="numQuestions" className={ui.label}>
-              Number of Questions (1–25)
-            </label>
-            <input
-              id="numQuestions"
-              name="numQuestions"
-              type="number"
-              min={1}
-              max={25}
-              value={formData.numQuestions}
-              onChange={handleChange}
-              placeholder="e.g. 5"
-              className={ui.input}
-            />
-          </div>
-
-          {/* Difficulty */}
-          <div className={ui.field}>
-            <label htmlFor="difficulty" className={ui.label}>
-              Difficulty
-            </label>
-            <select
-              id="difficulty"
-              name="difficulty"
-              value={formData.difficulty}
-              onChange={handleChange}
-              className={ui.select}
-            >
-              <option value="easy">Easy</option>
-              <option value="medium">Medium</option>
-              <option value="hard">Hard</option>
-            </select>
-          </div>
-
-          {/* Buttons */}
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="submit"
-              disabled={isLoading}
-              className={`${ui.btn} ${ui.primary} px-6 py-2.5 text-white`}
-            >
-              {isLoading ? '✨ Generating…' : 'Generate Quiz'}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setFormData({ text: '', numQuestions: 5, difficulty: 'medium' })}
-              className={`${ui.btn} ${ui.ghost} px-6 py-2.5`}
-            >
-              <RotateCcw className="h-4 w-4" />
-              Reset
-            </button>
-          </div>
-        </form>
-      ) : (
-        <div className="mt-4">
-          {quiz && <QuizPlayer quiz={quiz} onRestart={onRestart} />}
-        </div>
-      )}
-
-      {error && <p className="text-red-600 mt-4">{error}</p>}
+        )}
+      </main>
     </div>
   )
 }

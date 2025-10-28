@@ -79,6 +79,9 @@ app.use('/api/user', isAuthenticated, userRoutes);
 app.use('/api/dashboard', isAuthenticated, dashboardRoutes);
 // Mount ML routes at /api so endpoints are available as /api/summarize, /api/quiz/generate, etc.
 app.use('/api', mlRoutes);
+// Backwards-compatible mount: some deployments or older builds expect /api/ml/*
+// Keep this alias so both /api/summarize and /api/ml/summarize will work
+app.use('/api/ml', mlRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
