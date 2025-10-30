@@ -1,6 +1,8 @@
+// src/pages/FlashcardsPage.tsx
 import React, { useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
 import { RotateCcw } from 'lucide-react'
+import AppSidebar from '../components/AppSidebar' // ✅ add the global sidebar
 
 type Flashcard = { front: string; back: string }
 
@@ -96,103 +98,114 @@ const FlashcardsPage: React.FC = () => {
       if (!normalized.length) throw new Error('Could not parse flashcards')
       setCards(normalized)
     } catch (err: any) {
-      setError(err?.response?.data?.error || err?.message || 'Failed to generate flashcards')
+      setError(
+        err?.response?.data?.error || err?.message || 'Failed to generate flashcards'
+      )
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="container mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-6 text-indigo-700">
-        ✨ Flashcard Generator
-      </h1>
+    <div className="min-h-screen bg-gradient-to-b from-indigo-50 via-white to-white">
+      {/* ✅ Global App Sidebar (mobile drawer + desktop rail) */}
+      <AppSidebar />
 
-      <form
-        onSubmit={handleGenerate}
-        className="space-y-6 rounded-2xl border border-gray-200 bg-white/70 backdrop-blur-sm p-6 shadow-md"
-      >
-        {/* Source text */}
-        <div className={cls.field}>
-          <label htmlFor="text" className={cls.label}>
-            Source Text
-          </label>
-          <textarea
-            id="text"
-            name="text"
-            value={form.text}
-            onChange={handleChange}
-            rows={6}
-            placeholder="Paste or write the content you want flashcards for..."
-            className={cls.textarea}
-          />
-        </div>
+      {/* ✅ Leave room for mobile top/bottom bars and the desktop rail */}
+      {/* If your rail width differs, adjust md:ml-64 accordingly */}
+      <main className="pt-14 pb-14 md:pt-0 md:pb-0 md:ml-64">
+        <div className="container mx-auto p-6">
+          <h1 className="text-3xl font-bold mb-6 text-indigo-700">
+            ✨ Flashcard Generator
+          </h1>
 
-        {/* Number of flashcards */}
-        <div className={cls.field}>
-          <label htmlFor="numFlashcards" className={cls.label}>
-            Number of Flashcards
-          </label>
-          <input
-            id="numFlashcards"
-            name="numFlashcards"
-            type="number"
-            min={1}
-            max={50}
-            value={form.numFlashcards}
-            onChange={handleChange}
-            placeholder="e.g. 10"
-            className={cls.input}
-          />
-        </div>
-
-        {/* Buttons */}
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="submit"
-            disabled={!canGenerate || loading}
-            className={`${cls.btn} ${cls.primary} px-6 py-2.5 text-white`}
+          <form
+            onSubmit={handleGenerate}
+            className="space-y-6 rounded-2xl border border-gray-200 bg-white/70 backdrop-blur-sm p-6 shadow-md"
           >
-            {loading ? '✨ Generating…' : 'Generate Flashcards'}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setForm({ text: '', numFlashcards: 10 })}
-            className={`${cls.btn} ${cls.ghost} px-6 py-2.5`}
-          >
-            <RotateCcw className="h-4 w-4" />
-            Reset
-          </button>
-        </div>
-      </form>
-
-      {error && (
-        <p className="mt-4 text-red-600 font-medium text-center bg-red-50 py-2 rounded-lg">
-          {error}
-        </p>
-      )}
-
-      {/* Flashcards preview */}
-      {cards && cards.length > 0 && (
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 md:grid-cols-3">
-          {cards.map((c, i) => (
-            <div
-              key={i}
-              className="group cursor-pointer rounded-2xl bg-gradient-to-br from-indigo-50 to-white p-5 shadow-sm hover:shadow-md transition"
-            >
-              <div className="text-sm font-semibold text-indigo-600 mb-2">
-                Flashcard {i + 1}
-              </div>
-              <div className="text-gray-800 font-medium mb-1">{c.front}</div>
-              <div className="hidden group-hover:block text-sm text-gray-600 mt-2 transition">
-                <span className="font-semibold text-indigo-700">Answer:</span>{' '}
-                {c.back}
-              </div>
+            {/* Source text */}
+            <div className={cls.field}>
+              <label htmlFor="text" className={cls.label}>
+                Source Text
+              </label>
+              <textarea
+                id="text"
+                name="text"
+                value={form.text}
+                onChange={handleChange}
+                rows={6}
+                placeholder="Paste or write the content you want flashcards for..."
+                className={cls.textarea}
+              />
             </div>
-          ))}
+
+            {/* Number of flashcards */}
+            <div className={cls.field}>
+              <label htmlFor="numFlashcards" className={cls.label}>
+                Number of Flashcards
+              </label>
+              <input
+                id="numFlashcards"
+                name="numFlashcards"
+                type="number"
+                min={1}
+                max={50}
+                value={form.numFlashcards}
+                onChange={handleChange}
+                placeholder="e.g. 10"
+                className={cls.input}
+              />
+            </div>
+
+            {/* Buttons */}
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="submit"
+                disabled={!canGenerate || loading}
+                className={`${cls.btn} ${cls.primary} px-6 py-2.5 text-white`}
+              >
+                {loading ? '✨ Generating…' : 'Generate Flashcards'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setForm({ text: '', numFlashcards: 10 })}
+                className={`${cls.btn} ${cls.ghost} px-6 py-2.5`}
+              >
+                <RotateCcw className="h-4 w-4" />
+                Reset
+              </button>
+            </div>
+          </form>
+
+          {error && (
+            <p className="mt-4 text-red-600 font-medium text-center bg-red-50 py-2 rounded-lg">
+              {error}
+            </p>
+          )}
+
+          {/* Flashcards preview */}
+          {cards && cards.length > 0 && (
+            <div className="mt-8 grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+              {cards.map((c, i) => (
+                <div
+                  key={i}
+                  className="group cursor-pointer rounded-2xl bg-gradient-to-br from-indigo-50 to-white p-5 shadow-sm hover:shadow-md transition"
+                >
+                  <div className="text-sm font-semibold text-indigo-600 mb-2">
+                    Flashcard {i + 1}
+                  </div>
+                  <div className="text-gray-800 font-medium mb-1">{c.front}</div>
+                  <div className="hidden group-hover:block text-sm text-gray-600 mt-2 transition">
+                    <span className="font-semibold text-indigo-700">Answer:</span>{' '}
+                    {c.back}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-      )}
+      </main>
     </div>
   )
 }

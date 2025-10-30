@@ -1,6 +1,7 @@
+// src/pages/Dashboard.tsx
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import Sidebar from "../components/AppSidebar";
+import AppSidebar from "../components/AppSidebar"; // ✅ shared sidebar (mobile + desktop)
 
 import { Calendar, BookOpen, Zap, Brain } from "lucide-react";
 
@@ -13,7 +14,19 @@ type DashboardData = {
     totalDays?: number;
   };
 };
-//check 
+
+const ui = {
+  shell: "min-h-screen bg-gradient-to-b from-indigo-50 via-white to-white",
+  // ✅ same container width as other pages
+  container: "max-w-6xl mx-auto px-6",
+  // ✅ same card look as quiz/qa/flashcards
+  card: "rounded-2xl border border-gray-200 bg-white/80 backdrop-blur-sm shadow-sm transition p-6",
+  stat: "rounded-2xl border border-gray-200 bg-white p-6",
+  btnPrimary:
+    "inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60",
+  textarea:
+    "w-full rounded-lg border border-gray-300 bg-white p-3 text-gray-900 placeholder-gray-400 focus:border-gray-400 focus:outline-none focus:ring-0",
+};
 
 function StatCard({
   icon,
@@ -33,7 +46,7 @@ function StatCard({
     purple: "text-purple-600",
   };
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-6">
+    <div className={ui.stat}>
       <div className="flex items-center gap-3">
         <div className={`rounded-lg bg-gray-50 p-2 ${tone[color]}`}>{icon}</div>
         <div>
@@ -61,7 +74,7 @@ export default function Dashboard() {
         const res = await axios.get("/api/dashboard");
         setData(res.data);
       } catch {
-        setData(null); // soft-fail: still show the page
+        setData(null); // soft-fail
       } finally {
         setLoading(false);
       }
@@ -73,7 +86,6 @@ export default function Dashboard() {
   const flashcards = data?.progressData?.flashcardsStudied ?? 0;
   const quizzes = data?.progressData?.quizzesCompleted ?? 0;
 
-  // (optional) if you want to display % streak, compute via totalDays
   const progressPct = useMemo(() => {
     const total = Math.max(1, data?.progressData?.totalDays ?? 1);
     const done = Math.min(total, consecutiveDays);
@@ -89,11 +101,10 @@ export default function Dashboard() {
     try {
       const MAX_LEN = 10000;
       const payload = { text: text.length > MAX_LEN ? text.slice(0, MAX_LEN) : text };
-      const { data } = await axios.post(
-        "/api/summarize",
-        payload,
-        { headers: { "Content-Type": "application/json" }, timeout: 30000 }
-      );
+      const { data } = await axios.post("/api/summarize", payload, {
+        headers: { "Content-Type": "application/json" },
+        timeout: 30000,
+      });
       if (data?.summary) setSummary(data.summary);
       else throw new Error(data?.error || "No summary returned");
     } catch (err: any) {
@@ -104,106 +115,110 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* LEFT RAIL */}
-      <Sidebar />
+    <div className={ui.shell}>
+      {/* ✅ Global Sidebar */}
+      <AppSidebar />
 
-      {/* MAIN */}
-      <main className="ml-64 p-8">
-        {/* Header */}
-        <header className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900">
-            Welcome back, <span className="text-gray-900"></span>!
-          </h1>
-          <p className="mt-1 text-gray-600">Ready to continue your learning journey?</p>
-        </header>
+      {/* ✅ Consistent offsets with other pages:
+          - pt-14/pb-14 for mobile top/bottom bars
+          - md:pl-64 for desktop left rail */}
+      <main className={`pt-14 pb-14 md:pt-0 md:pb-0 md:pl-64`}>
+        <div className={`${ui.container} py-8`}>
+          {/* Header */}
+          <header className="mb-6">
+            <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">
+              Welcome back!
+            </h1>
+            <p className="mt-1 text-gray-600">Ready to continue your learning journey?</p>
+          </header>
 
-        {/* Stats Grid */}
-        <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-          <StatCard
-            icon={<Calendar className="h-6 w-6" />}
-            label="Consecutive Days"
-            value={consecutiveDays}
-            color="blue"
-          />
-          <StatCard
-            icon={<BookOpen className="h-6 w-6" />}
-            label="Documents"
-            value={documents}
-            color="green"
-          />
-          <StatCard
-            icon={<Zap className="h-6 w-6" />}
-            label="Flashcards"
-            value={flashcards}
-            color="yellow"
-          />
-          <StatCard
-            icon={<Brain className="h-6 w-6" />}
-            label="Quizzes"
-            value={quizzes}
-            color="purple"
-          />
-        </section>
+          {/* Stats Grid */}
+          <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+            <StatCard
+              icon={<Calendar className="h-6 w-6" />}
+              label="Consecutive Days"
+              value={consecutiveDays}
+              color="blue"
+            />
+            <StatCard
+              icon={<BookOpen className="h-6 w-6" />}
+              label="Documents"
+              value={documents}
+              color="green"
+            />
+            <StatCard
+              icon={<Zap className="h-6 w-6" />}
+              label="Flashcards"
+              value={flashcards}
+              color="yellow"
+            />
+            <StatCard
+              icon={<Brain className="h-6 w-6" />}
+              label="Quizzes"
+              value={quizzes}
+              color="purple"
+            />
+          </section>
 
-        {/* Quick Paste & Summary */}
-        <section className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left: Input */}
-          <div className="rounded-xl border border-gray-200 bg-white p-6">
-            <h2 className="text-xl font-semibold text-gray-900">Quick Paste & Summarize</h2>
-            <form onSubmit={handleSummarize} className="mt-4 space-y-4">
-              <textarea
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                rows={8}
-                placeholder="Paste any text here to get an instant AI summary…"
-                className="w-full rounded-lg border border-gray-300 bg-white p-3 text-gray-900 placeholder-gray-400 focus:border-gray-400 focus:outline-none focus:ring-0"
-              />
-              <button
-                type="submit"
-                disabled={!text.trim() || summarizing}
-                className="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
-              >
-                {summarizing ? "Summarizing…" : "Get Summary"}
-              </button>
-              {sumError && (
-                <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
-                  {sumError}
-                </div>
-              )}
-            </form>
-          </div>
-
-          {/* Right: Summary */}
-          <div className="rounded-xl border border-gray-200 bg-white p-6">
-            <h2 className="text-xl font-semibold text-gray-900">Summary</h2>
-            <div className="mt-4 rounded-lg bg-gray-50 p-4 text-gray-800 min-h-[220px]">
-              {summary ? (
-                <p className="whitespace-pre-wrap leading-relaxed">{summary}</p>
-              ) : loading ? (
-                <p className="text-gray-500">Loading…</p>
-              ) : (
-                <p className="text-gray-500">
-                  Your summary will appear here after you paste text and click <b>Get Summary</b>.
-                </p>
-              )}
-            </div>
-
-            {/* optional small streak bar to match the vibe */}
-            <div className="mt-4">
-              <div className="flex justify-between text-xs text-gray-500 mb-1">
-                <span>Streak Progress</span>
-                <span>{progressPct}%</span>
-              </div>
-              <div className="h-2 w-full rounded-full bg-gray-200 overflow-hidden">
-                <div
-                  className="h-2 rounded-full bg-indigo-600 transition-all"
-                  style={{ width: `${progressPct}%` }}
+          {/* Quick Paste & Summary */}
+          <section className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Left: Input */}
+            <div className={ui.card}>
+              <h2 className="text-xl font-semibold text-gray-900">Quick Paste & Summarize</h2>
+              <form onSubmit={handleSummarize} className="mt-4 space-y-4">
+                <textarea
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  rows={8}
+                  placeholder="Paste any text here to get an instant AI summary…"
+                  className={ui.textarea}
                 />
+                <button
+                  type="submit"
+                  disabled={!text.trim() || summarizing}
+                  className={ui.btnPrimary}
+                >
+                  {summarizing ? "Summarizing…" : "Get Summary"}
+                </button>
+                {sumError && (
+                  <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+                    {sumError}
+                  </div>
+                )}
+              </form>
+            </div>
+
+            {/* Right: Summary */}
+            <div className={ui.card}>
+              <h2 className="text-xl font-semibold text-gray-900">Summary</h2>
+              <div className="mt-4 rounded-lg bg-gray-50 p-4 text-gray-800 min-h-[220px]">
+                {summary ? (
+                  <p className="whitespace-pre-wrap leading-relaxed">{summary}</p>
+                ) : loading ? (
+                  <p className="text-gray-500">Loading…</p>
+                ) : (
+                  <p className="text-gray-500">
+                    Your summary will appear here after you paste text and click <b>Get Summary</b>.
+                  </p>
+                )}
+              </div>
+
+              {/* Streak bar */}
+              <div className="mt-4">
+                <div className="flex justify-between text-xs text-gray-500 mb-1">
+                  <span>Streak Progress</span>
+                  <span>{progressPct}%</span>
+                </div>
+                <div className="h-2 w-full rounded-full bg-gray-200 overflow-hidden">
+                  <div
+                    className="h-2 rounded-full bg-indigo-600 transition-all"
+                    style={{ width: `${progressPct}%` }}
+                  />
+                </div>
               </div>
             </div>
-          </div>
-        </section>
+          </section>
+        </div>
       </main>
     </div>
   );
