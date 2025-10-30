@@ -1,31 +1,170 @@
-Developer Instruction Prompt (for VS Code / AI Agent):
+Implement Stripe subscriptions so users can upgrade to Premium (unlimited). Provide:
 
-Update the application to enforce a unified usage-limit system across all AI features — including Quiz Generator, Q&A Assistant, Summarizer, and Flashcard Creator.
+Checkout (subscribe),
 
-If the user is not logged in (guest mode), allow them to use each AI feature a maximum of 3 times. After that, show a modal or popup message:
+Customer billing portal (manage/cancel),
 
-“You’ve reached your free limit. Guests can try this feature up to 3 times without logging in. Log in to unlock 2 more free uses or upgrade to Premium for unlimited access.”
+Webhooks (activate/deactivate premium),
 
-If the user is logged in but not Premium, allow 5 total free uses per feature. After the fifth use, show:
+UI: “Upgrade to Premium” entry points + status badges,
 
-“You’ve reached your 5-use limit. Upgrade to Premium to enjoy unlimited access, faster responses, and priority performance.”
+Plan-aware usage gates (free 3 / logged-in 5 / premium unlimited).
 
-If the user is Premium, provide unlimited access — no restrictions or pop-ups.
+Deliverables
 
-Display the following paragraph whenever the user approaches or exceeds their limit (applies to all features dynamically):
+Backend (Node/Express)
 
-“You’re using {featureName}. Guest users get 3 free tries, logged-in users get 5, and Premium members enjoy unlimited access. You’ve used {usedCount} out of {limitText} available attempts. Log in or upgrade to continue using this feature.”
+Add Stripe SDK and types.
 
-Store and track usage count per feature in localStorage for guests, and via the backend (user profile) for logged-in users.
+Read env vars:
 
-Ensure the same prompt and behavior apply consistently across all pages — quiz, flashcards, summarizer, and Q&A.
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=
+STRIPE_PRICE_PREMIUM_MONTHLY=   # price_xxx
+STRIPE_PRICE_PREMIUM_YEARLY=    # (optional)
+APP_BASE_URL=                   # e.g., https://learnova.app
 
-Use these buttons in the popup:
 
-[Use Remaining Free Try]
+Create routes:
 
-[Log In (Get 2 More Free)]
+POST /api/billing/create-checkout-session
 
-[Upgrade to Premium 🚀]
+Requires authenticated user (redirect unauthenticated to login).
 
-Add this logic globally so that every AI-powered action checks the usage limit before making an API call.
+Creates/looks up Stripe Customer by user.id + user.email (save stripeCustomerId).
+
+Uses mode: 'subscription', line_items with price: STRIPE_PRICE_PREMIUM_MONTHLY, trial set to 0.
+
+success_url = ${APP_BASE_URL}/account?billing=success
+
+cancel_url = ${APP_BASE_URL}/account?billing=cancel
+
+Return { url } to redirect.
+
+POST /api/billing/create-portal-session
+
+Requires authenticated user with stripeCustomerId.
+
+Create billing portal session, return_url = ${APP_BASE_URL}/account.
+
+Return { url }.
+
+POST /api/billing/stripe-webhook (raw body)
+
+Verify with STRIPE_WEBHOOK_SECRET.
+
+Handle events:
+
+checkout.session.completed → set user.role='premium', store stripeCustomerId, subscriptionId, plan='premium', status='active', current_period_end.
+
+customer.subscription.updated → update status, current_period_end.
+
+customer.subscription.deleted or …canceled → downgrade at period end; set status='canceled' and schedule downgrade job, or immediately revert to role='user' if canceled now.
+
+Log + respond 200.
+
+DB/User model changes (add migration or schema changes):
+
+role: 'guest'|'user'|'premium' (default 'user' for logged-in accounts).
+
+stripeCustomerId, stripeSubscriptionId, subscriptionStatus, currentPeriodEnd.
+
+Optional: plan: 'free'|'premium'.
+
+Usage gating middleware (server-side)
+
+Endpoint wrapper to check allowance per day (or rolling) per feature:
+
+guest (no auth): 3 total actions/day across quiz/qa/summary/flashcards.
+
+user (auth): 5 total/day.
+
+premium: unlimited.
+
+Persist counts server-side keyed by IP for guests (fallback), and user.id for logged-in.
+
+Expose a meta endpoint GET /api/usage that returns { role, usedToday, limit }.
+
+Frontend (React)
+
+Add “Upgrade” CTAs:
+
+In AppSidebar: a “Upgrade to Premium” button/badge for non-premium users.
+
+In gated UIs (quiz/qa/summary/flashcards): when limit exceeded, show an interstitial with benefits + “Upgrade” button.
+
+In /account: show plan card with Current Plan (Free/User/Premium), usage stats, buttons:
+
+“Upgrade to Premium” (calls /api/billing/create-checkout-session then window.location = url)
+
+“Manage Billing” (calls /api/billing/create-portal-session then redirect)
+
+Add plan indicator:
+
+Small badge next to user in top bar / sidebar: Free (guest), User, Premium.
+
+Usage indicator:
+
+Fetch /api/usage on page mount; render used/limit chip (e.g., “3/5 today”) unless premium.
+
+UX copy (short):
+
+Free (guest): “Try Learnova free — 3 actions/day without login.”
+
+User (logged-in): “You have 5 actions/day. Upgrade to Premium for unlimited.”
+
+Premium: “Unlimited usage active ✨”
+
+Error states: If checkout/portal session fails, show toast with retry.
+
+Security & Testing
+
+Use test mode keys initially.
+
+Allow only backend to create Checkout/Portal sessions.
+
+Webhook route must consume raw body (no JSON parser) and verify signature.
+
+Record Stripe IDs only after verification.
+
+Add seed/test script to simulate webhook for local testing.
+
+Acceptance Criteria
+
+Guest (no login): can use any feature up to 3 actions/day, then sees upgrade/login modal. Sidebar shows “Login” + “Upgrade” (upgrade directs to login).
+
+Logged-in user: limit 5 actions/day; upgrade opens Stripe Checkout; upon success, user becomes premium (webhook-driven) and sees unlimited usage.
+
+Premium: “Manage billing” button opens Stripe Customer Portal; canceling subscription downgrades at period end (or immediately if configured).
+
+/account reflects accurate plan and next renewal date.
+
+All pages (dashboard, quiz, qa, flashcards, profile) show consistent plan badge and usage bar.
+
+Implementation Notes
+
+Backend: create apps/backend/src/routes/billing.ts for the three endpoints; wire in app.ts.
+
+Webhook route: app.post('/api/billing/stripe-webhook', express.raw({ type: 'application/json' }), handler).
+
+Ensure general JSON middleware does not apply to webhook path.
+
+Store usage counters in DB or Redis; for quick start, persist per day in DB table usage_events(userId/IP, feature, createdAt).
+
+Env gating in CI/Render: set Stripe secrets; in dev, use Stripe CLI to forward webhooks: stripe listen --forward-to localhost:3001/api/billing/stripe-webhook.
+
+Copy/UX Snippets (for interstitial modal)
+
+Title: “Unlock Unlimited Learning”
+
+Bullets: “Unlimited Quiz, Q&A, Summaries”, “Priority generation”, “Cancel anytime”
+
+Buttons: “Upgrade to Premium”, “Maybe later”
+
+Post-merge Checklist
+
+Add products/prices in Stripe Dashboard; set STRIPE_PRICE_PREMIUM_MONTHLY.
+
+Configure webhook endpoint in Stripe → events: checkout.session.completed, customer.subscription.updated, customer.subscription.deleted.
+
+Run migrations; test full flow with test card 4242 4242 4242 4242.

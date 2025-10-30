@@ -15,6 +15,8 @@ import userRoutes from './routes/user';
 import dashboardRoutes from './routes/dashboard';
 import mlRoutes from './routes/ml';
 import logRoutes from './routes/log';
+import billingRoutes, { stripeWebhookHandler } from './routes/billing';
+import usageRoutes from './routes/usage';
 import { isAuthenticated } from './middleware/auth';
 
 const app = express();
@@ -122,6 +124,14 @@ app.use('/api/dashboard', isAuthenticated, dashboardRoutes);
 app.use('/api', mlRoutes);
 // Logging endpoints (public, dev helper)
 app.use('/api/log', logRoutes);
+// Billing routes (checkout + portal)
+app.use('/api/billing', billingRoutes);
+
+// Stripe webhook (must use raw body)
+app.post('/api/billing/stripe-webhook', express.raw({ type: 'application/json' }), (req, res) => stripeWebhookHandler(req, res))
+
+// Usage meta endpoint
+app.use('/api/usage', usageRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

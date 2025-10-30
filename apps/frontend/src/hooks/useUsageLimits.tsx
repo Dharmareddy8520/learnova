@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import axios from 'axios'
 
@@ -16,6 +16,7 @@ type CheckResult = {
 
 export function useUsageLimits() {
   const { user, updateUserUsage, refreshUser } = useAuth()
+  const [serverUsage, setServerUsage] = useState<any>(null)
   const V = (import.meta as any).env || {}
   const guestLimit = Number(V.VITE_GUEST_LIMIT ?? 3)
   const freeLimit = Number(V.VITE_FREE_TIER_LIMIT ?? 5)
@@ -31,9 +32,30 @@ export function useUsageLimits() {
     return getLimitForRole(user?.role)
   }, [user, getLimitForRole])
 
+  // Fetch authoritative usage metadata from server (role, usedToday, limit, perFeature)
+  const fetchServerUsage = useCallback(async () => {
+    try {
+      const resp = await axios.get('/api/usage')
+      setServerUsage(resp.data)
+      return resp.data
+    } catch (e) {
+      // ignore — server may be unreachable for guests
+      return null
+    }
+  }, [])
+
+  // keep server usage in sync when user state changes
+  useEffect(() => {
+    // fetch once on mount or when auth changes
+    fetchServerUsage()
+  }, [fetchServerUsage, user?.id])
+
   const getUsed = useCallback((feature: string) => {
-    // logged-in user's usage (comes from server / auth context)
+    // logged-in user's usage: prefer authoritative server per-feature counts when available
     if (user) {
+      if (serverUsage && serverUsage.perFeature && typeof serverUsage.perFeature[feature] !== 'undefined') {
+        return Number(serverUsage.perFeature[feature] || 0)
+      }
       const u: any = user
       if (u.usageDate === todayStr() && u.usage && typeof u.usage[feature] !== 'undefined') {
         return Number(u.usage[feature] || 0)
@@ -41,8 +63,13 @@ export function useUsageLimits() {
       return 0
     }
 
-    // guest: read from localStorage
+    // guest: prefer server-side usedToday if available (we don't have per-feature breakdown for guests),
+    // otherwise fall back to localStorage per-feature counters.
     try {
+      if (serverUsage && serverUsage.role === 'guest') {
+        // return total usedToday as a fallback for any feature display
+        return Number(serverUsage.usedToday || 0)
+      }
       const raw = localStorage.getItem('usage')
       if (!raw) return 0
       const parsed = JSON.parse(raw)
@@ -51,7 +78,7 @@ export function useUsageLimits() {
     } catch (e) {
       return 0
     }
-  }, [user])
+  }, [user, serverUsage])
 
   const isUnlimited = useCallback((feature: string) => getLimit(feature) < 0, [getLimit])
 
@@ -65,6 +92,8 @@ export function useUsageLimits() {
         // merge into auth context if possible
         if (payload && payload.usage && updateUserUsage) {
           updateUserUsage({ feature: payload.feature, used: payload.used, limit: payload.limit })
+          // refresh authoritative server usage
+          fetchServerUsage().catch(() => {})
         }
         return { used: payload.used, limit: payload.limit }
       } catch (e: any) {
@@ -94,6 +123,8 @@ export function useUsageLimits() {
         } catch (e) {
           // ignore logging failures
         }
+      // also refresh server-side guest count logging may have been recorded
+      fetchServerUsage().catch(() => {})
       return { used: parsed.counts[feature], limit: guestLimit }
     } catch (e) {
       throw e
@@ -107,5 +138,5 @@ export function useUsageLimits() {
     return { allowed: used < limit, used, limit, isUnlimited: false }
   }, [getLimit, getUsed])
 
-  return { getLimit, getUsed, isUnlimited, increment, check, refreshUser }
+  return { getLimit, getUsed, isUnlimited, increment, check, refreshUser, fetchServerUsage, serverUsage }
 }

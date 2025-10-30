@@ -22,6 +22,11 @@ export interface IUser extends Document {
   comparePassword(candidatePassword: string): Promise<boolean>;
   updateLastActive(): Promise<void>;
   calculateConsecutiveDays(): Promise<number>;
+  // Billing fields
+  stripeCustomerId?: string;
+  stripeSubscriptionId?: string;
+  subscriptionStatus?: string;
+  currentPeriodEnd?: Date | null;
 }
 
 const UserSchema = new Schema<IUser>({
@@ -70,6 +75,14 @@ const UserSchema = new Schema<IUser>({
   }
 }, {
   timestamps: true
+});
+
+// Billing-related fields
+(UserSchema as any).add({
+  stripeCustomerId: { type: String, default: '' },
+  stripeSubscriptionId: { type: String, default: '' },
+  subscriptionStatus: { type: String, default: 'inactive' },
+  currentPeriodEnd: { type: Date, default: null }
 });
 
 // Per-feature usage counts for daily limits

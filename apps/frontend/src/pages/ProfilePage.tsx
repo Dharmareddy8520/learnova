@@ -236,19 +236,72 @@ const ProfilePage: React.FC = () => {
       <main className="pt-14 pb-14 md:pt-0 md:pb-0 md:ml-64">
         <div className={ui.container}>
           <div className="mb-6 flex items-center justify-between">
-            <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">Profile Settings</h1>
-              <span className={ui.badge}>Secure & Private</span>
-              {/* Status summary fetched from backend */}
-              <div className="ms-4">
-                <div className="text-sm text-gray-500">Account status</div>
-                <div className="flex items-center gap-2 mt-1">
-                  <div className="text-xs text-gray-700">{status?.user?.role ? status.user.role.toUpperCase() : 'GUEST'}</div>
-                  <div className="text-xs text-gray-500">•</div>
-                  <div className="text-xs text-gray-500">Streak: {status?.progress?.consecutiveDays ?? '-'}</div>
-                  <div className="text-xs text-gray-500">•</div>
-                  <div className="text-xs text-gray-500">Days: {status?.progress?.totalDays ?? '-'}</div>
+            <div>
+              <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">Profile Settings</h1>
+              <div className="mt-2 flex items-center gap-4">
+                <span className={ui.badge}>Secure & Private</span>
+                {/* Status summary fetched from backend */}
+                <div>
+                  <div className="text-sm text-gray-500">Account status</div>
+                  <div className="flex items-center gap-2 mt-1">
+                    <div className="text-xs text-gray-700">{status?.user?.role ? status.user.role.toUpperCase() : 'GUEST'}</div>
+                    <div className="text-xs text-gray-500">•</div>
+                    <div className="text-xs text-gray-500">Streak: {status?.progress?.consecutiveDays ?? '-'}</div>
+                    <div className="text-xs text-gray-500">•</div>
+                    <div className="text-xs text-gray-500">Days: {status?.progress?.totalDays ?? '-'}</div>
+                  </div>
                 </div>
               </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              {/* Upgrade / Manage Billing actions */}
+              {user ? (
+                status?.user?.role !== 'premium' ? (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const resp = await axios.post('/api/billing/create-checkout-session')
+                        const url = resp.data?.url
+                        if (url) window.location.href = url
+                        else showToast('error', 'Failed to create checkout session')
+                      } catch (err: any) {
+                        showToast('error', err?.response?.data?.error || 'Failed to initiate upgrade')
+                      }
+                    }}
+                    className={`${ui.btn} ${ui.primary} px-4 py-2`}
+                  >
+                    Upgrade to Premium
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const resp = await axios.post('/api/billing/create-portal-session')
+                        const url = resp.data?.url
+                        if (url) window.location.href = url
+                        else showToast('error', 'Failed to open billing portal')
+                      } catch (err: any) {
+                        showToast('error', err?.response?.data?.error || 'Failed to open billing portal')
+                      }
+                    }}
+                    className={`${ui.btn} ${ui.ghost} px-4 py-2`}
+                  >
+                    Manage Billing
+                  </button>
+                )
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => window.location.href = '/login'}
+                  className={`${ui.btn} ${ui.primary} px-4 py-2`}
+                >
+                  Login to Upgrade
+                </button>
+              )}
+            </div>
           </div>
 
           {toast && (

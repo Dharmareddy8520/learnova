@@ -4,6 +4,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { LogIn, LogOut, User as UserIcon } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { UsageOverview } from './UsageOverview'
+import axios from 'axios'
+import { ShoppingCart } from 'lucide-react'
 
 type Item = { label: string; path: string };
 
@@ -160,6 +162,26 @@ export default function Sidebar() {
         <div className="mt-auto px-2 pb-4 pt-2 border-t border-gray-200 space-y-2">
           {/* usage overview */}
           <UsageOverview />
+          {/* Upgrade CTA for non-premium users */}
+          {user && user.role !== 'premium' && (
+            <button
+              onClick={async () => {
+                try {
+                  const resp = await axios.post('/api/billing/create-checkout-session')
+                  const url = resp.data?.url
+                  if (url) window.location.href = url
+                } catch (e) {
+                  // eslint-disable-next-line no-console
+                  console.error('Upgrade failed', e)
+                  navigate('/account')
+                }
+              }}
+              className="w-full flex items-center gap-2 rounded-md px-4 py-2 text-sm text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700"
+            >
+              <ShoppingCart className="h-4 w-4" />
+              Upgrade to Premium
+            </button>
+          )}
           {user ? (
             <>
               <button

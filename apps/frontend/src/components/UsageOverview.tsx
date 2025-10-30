@@ -9,7 +9,7 @@ const FEATURES = [
 ]
 
 export const UsageOverview: React.FC = () => {
-  const { getUsed, getLimit, isUnlimited, refreshUser } = useUsageLimits()
+  const { getUsed, getLimit, isUnlimited, refreshUser, serverUsage } = useUsageLimits()
 
   // On mount, ask backend for the freshest user usage so counters reflect server state
   React.useEffect(() => {
@@ -37,16 +37,23 @@ export const UsageOverview: React.FC = () => {
     <div className="px-2 py-3 border-t border-gray-100">
       <h4 className="text-sm font-medium text-gray-700 mb-2">Usage</h4>
       <ul className="text-xs space-y-1">
-        {FEATURES.map(f => {
-          const used = getUsed(f.key)
-          const limit = getLimit(f.key)
-          return (
-            <li key={f.key} className="flex items-center justify-between">
-              <span className="text-gray-600">{f.label}</span>
-              <span className="font-mono text-sm text-gray-800">{used} / {isUnlimited(f.key) ? '∞' : limit}</span>
+          {serverUsage && serverUsage.role === 'guest' ? (
+            <li className="flex items-center justify-between">
+              <span className="text-gray-600">Today</span>
+              <span className="font-mono text-sm text-gray-800">{serverUsage.usedToday} / {serverUsage.limit}</span>
             </li>
-          )
-        })}
+          ) : (
+            FEATURES.map(f => {
+              const used = getUsed(f.key)
+              const limit = getLimit(f.key)
+              return (
+                <li key={f.key} className="flex items-center justify-between">
+                  <span className="text-gray-600">{f.label}</span>
+                  <span className="font-mono text-sm text-gray-800">{used} / {isUnlimited(f.key) ? '∞' : limit}</span>
+                </li>
+              )
+            })
+          )}
       </ul>
     </div>
   )
