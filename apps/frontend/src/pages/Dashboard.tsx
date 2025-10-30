@@ -13,6 +13,7 @@ type DashboardData = {
     totalDays?: number;
   };
 };
+//check 
 
 function StatCard({
   icon,
