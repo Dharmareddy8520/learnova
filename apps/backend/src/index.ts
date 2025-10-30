@@ -14,6 +14,7 @@ import authRoutes from './routes/auth';
 import userRoutes from './routes/user';
 import dashboardRoutes from './routes/dashboard';
 import mlRoutes from './routes/ml';
+import logRoutes from './routes/log';
 import { isAuthenticated } from './middleware/auth';
 
 const app = express();
@@ -119,6 +120,8 @@ app.use('/api/user', isAuthenticated, userRoutes);
 app.use('/api/dashboard', isAuthenticated, dashboardRoutes);
 // Mount ML routes at /api so endpoints are available as /api/summarize, /api/quiz/generate, etc.
 app.use('/api', mlRoutes);
+// Logging endpoints (public, dev helper)
+app.use('/api/log', logRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

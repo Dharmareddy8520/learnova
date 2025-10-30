@@ -72,6 +72,19 @@ const UserSchema = new Schema<IUser>({
   timestamps: true
 });
 
+// Per-feature usage counts for daily limits
+// Stored as an object mapping featureName -> number, and a usageDate string (YYYY-MM-DD)
+(UserSchema as any).add({
+  usage: {
+    type: Schema.Types.Mixed,
+    default: {}
+  },
+  usageDate: {
+    type: String,
+    default: ''
+  }
+});
+
 // Hash password before saving
 UserSchema.pre('save', async function(next) {
   if (!this.isModified('passwordHash')) return next();
@@ -114,6 +127,28 @@ UserSchema.methods.updateLastActive = async function(): Promise<void> {
   this.lastActiveAt = now;
   await this.save();
 };
+
+// Increment usage for a feature with daily reset.
+UserSchema.methods.incrementUsage = async function(feature: string): Promise<{ used: number; usage: Record<string, number>; usageDate: string }> {
+  const now = new Date()
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  if (this.usageDate !== today) {
+    this.usage = {}
+    this.usageDate = today
+  }
+  const prev = (this.usage && typeof this.usage[feature] === 'number') ? Number(this.usage[feature]) : 0
+  const next = prev + 1
+  this.usage = { ...(this.usage || {}), [feature]: next }
+  await this.save()
+  // Log to server terminal for visibility during development
+  try {
+    // eslint-disable-next-line no-console
+    console.log(`USAGE_INCREMENT user:${this._id} feature:${feature} used:${next} usageDate:${this.usageDate}`)
+  } catch (e) {
+    // ignore
+  }
+  return { used: next, usage: this.usage as Record<string, number>, usageDate: this.usageDate }
+}
 
 // Calculate consecutive days
 UserSchema.methods.calculateConsecutiveDays = async function(): Promise<number> {

@@ -1,0 +1,111 @@
+import { useCallback } from 'react'
+import { useAuth } from '../contexts/AuthContext'
+import axios from 'axios'
+
+function todayStr() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+type CheckResult = {
+  allowed: boolean
+  used: number
+  limit: number
+  isUnlimited: boolean
+}
+
+export function useUsageLimits() {
+  const { user, updateUserUsage, refreshUser } = useAuth()
+  const V = (import.meta as any).env || {}
+  const guestLimit = Number(V.VITE_GUEST_LIMIT ?? 3)
+  const freeLimit = Number(V.VITE_FREE_TIER_LIMIT ?? 5)
+  const premiumLimit = Number(V.VITE_PREMIUM_TIER_LIMIT ?? -1)
+
+  const getLimitForRole = useCallback((role?: string) => {
+    if (!role) return guestLimit
+    if (role === 'premium') return premiumLimit
+    return freeLimit
+  }, [guestLimit, freeLimit, premiumLimit])
+
+  const getLimit = useCallback((_feature: string) => {
+    return getLimitForRole(user?.role)
+  }, [user, getLimitForRole])
+
+  const getUsed = useCallback((feature: string) => {
+    // logged-in user's usage (comes from server / auth context)
+    if (user) {
+      const u: any = user
+      if (u.usageDate === todayStr() && u.usage && typeof u.usage[feature] !== 'undefined') {
+        return Number(u.usage[feature] || 0)
+      }
+      return 0
+    }
+
+    // guest: read from localStorage
+    try {
+      const raw = localStorage.getItem('usage')
+      if (!raw) return 0
+      const parsed = JSON.parse(raw)
+      if (parsed.date !== todayStr()) return 0
+      return Number((parsed.counts && parsed.counts[feature]) || 0)
+    } catch (e) {
+      return 0
+    }
+  }, [user])
+
+  const isUnlimited = useCallback((feature: string) => getLimit(feature) < 0, [getLimit])
+
+  // increment usage (guest: localStorage, logged-in: POST /api/user/usage)
+  const increment = useCallback(async (feature: string) => {
+    if (user) {
+      try {
+        const resp = await axios.post('/api/user/usage', { feature })
+        // server returns { feature, used, usage, usageDate, limit }
+        const payload = resp.data
+        // merge into auth context if possible
+        if (payload && payload.usage && updateUserUsage) {
+          updateUserUsage({ feature: payload.feature, used: payload.used, limit: payload.limit })
+        }
+        return { used: payload.used, limit: payload.limit }
+      } catch (e: any) {
+        // if server denied due to limit, forward that info
+        if (e?.response?.status === 403 && e.response.data?.usage) {
+          return { used: e.response.data.usage.used, limit: e.response.data.usage.limit }
+        }
+        throw e
+      }
+    }
+
+    // guest: localStorage with date reset
+    try {
+      const raw = localStorage.getItem('usage')
+      let parsed: any = { date: todayStr(), counts: {} }
+      if (raw) {
+        parsed = JSON.parse(raw)
+      }
+      if (parsed.date !== todayStr()) {
+        parsed = { date: todayStr(), counts: {} }
+      }
+      parsed.counts[feature] = Number(parsed.counts[feature] || 0) + 1
+      localStorage.setItem('usage', JSON.stringify(parsed))
+        // also send a log to the backend so it appears in the server terminal (dev helper)
+        try {
+          await axios.post('/api/log/guest-usage', { feature, used: parsed.counts[feature] })
+        } catch (e) {
+          // ignore logging failures
+        }
+      return { used: parsed.counts[feature], limit: guestLimit }
+    } catch (e) {
+      throw e
+    }
+  }, [user, updateUserUsage, guestLimit])
+
+  const check = useCallback((feature: string): CheckResult => {
+    const limit = getLimit(feature)
+    const used = getUsed(feature)
+    if (limit < 0) return { allowed: true, used, limit, isUnlimited: true }
+    return { allowed: used < limit, used, limit, isUnlimited: false }
+  }, [getLimit, getUsed])
+
+  return { getLimit, getUsed, isUnlimited, increment, check, refreshUser }
+}

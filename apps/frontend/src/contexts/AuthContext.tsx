@@ -7,6 +7,8 @@ interface User {
   email: string
   role: 'free' | 'premium'
   consecutiveDays: number
+  usage?: Record<string, number>
+  usageDate?: string | null
 }
 
 interface AuthContextType {
@@ -15,6 +17,8 @@ interface AuthContextType {
   register: (name: string, email: string, password: string) => Promise<void>
   logout: () => Promise<void>
   isLoading: boolean
+  updateUserUsage?: (usage: { feature: string; used: number; limit?: number }) => void
+  refreshUser?: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -33,10 +37,66 @@ axios.defaults.withCredentials = true
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  // update user usage (merge usage object into user)
+  const updateUserUsage = React.useCallback((u?: { feature: string; used: number; limit?: number }) => {
+    if (!u) return
+    setUser(prev => {
+      if (!prev) return prev
+      const prevUsage = prev.usage || {}
+      const nextUsage = { ...prevUsage, [u.feature]: u.used }
+      return { ...prev, usage: nextUsage, usageDate: prev.usageDate }
+    })
+  }, [])
+
+  const refreshUser = React.useCallback(async () => {
+    try {
+      const resp = await axios.get('/api/user/me')
+      setUser(resp.data.user)
+    } catch (e) {
+      // ignore
+    }
+  }, [])
 
   // Check if user is logged in on app load
   useEffect(() => {
     checkAuthStatus()
+  }, [])
+
+  // Attach an axios response interceptor to capture any { usage } payload returned by
+  // backend ML endpoints and merge it into the user so the UI updates immediately.
+  useEffect(() => {
+    const id = axios.interceptors.response.use(
+      (response) => {
+        try {
+          const usage = response?.data?.usage
+          if (usage && typeof usage.feature === 'string') {
+            updateUserUsage(usage)
+          }
+        } catch (e) {
+          // ignore
+        }
+        return response
+      },
+      (error) => {
+        try {
+          const resp = error?.response
+          if (resp && resp.status === 403 && resp.data && resp.data.usage) {
+            // Dispatch a global event so UI can show a modal
+            try {
+              const ev = new CustomEvent('usage:limit', { detail: resp.data.usage })
+              window.dispatchEvent(ev)
+            } catch (e) {
+              // ignore
+            }
+          }
+        } catch (e) {
+          // ignore
+        }
+        return Promise.reject(error)
+      }
+    )
+
+    return () => { axios.interceptors.response.eject(id) }
   }, [])
 
   const checkAuthStatus = async () => {
@@ -84,6 +144,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     register,
     logout,
     isLoading
+    ,updateUserUsage, refreshUser
   }
 
   return (

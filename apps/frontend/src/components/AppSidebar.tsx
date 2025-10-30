@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { LogIn, LogOut, User as UserIcon } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
+import { UsageOverview } from './UsageOverview'
 
 type Item = { label: string; path: string };
 
@@ -107,6 +108,11 @@ export default function Sidebar() {
           ))}
         </nav>
 
+        {/* mobile usage overview */}
+        <div className="mt-4">
+          <UsageOverview />
+        </div>
+
         {/* mobile footer actions */}
         <div className="mt-6 pt-4 border-t border-gray-200 space-y-2">
           {user ? (
@@ -152,6 +158,8 @@ export default function Sidebar() {
 
         {/* desktop footer actions pinned to bottom */}
         <div className="mt-auto px-2 pb-4 pt-2 border-t border-gray-200 space-y-2">
+          {/* usage overview */}
+          <UsageOverview />
           {user ? (
             <>
               <button

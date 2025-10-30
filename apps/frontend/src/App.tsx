@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
+import { GlobalUsageModal } from './components/GlobalUsageModal'
 import LandingPage from './pages/LandingPage'
 import SignupPage from './pages/SignupPage'
 import LoginPage from './pages/LoginPage'
@@ -15,6 +16,7 @@ function App() {
   return (
     <AuthProvider>
       <div className="min-h-screen bg-gray-50">
+        <GlobalUsageModal />
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/signup" element={<SignupPage />} />
