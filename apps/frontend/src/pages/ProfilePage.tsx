@@ -84,6 +84,7 @@ const ProfilePage: React.FC = () => {
     notifyReminders: true,
     notifyProduct: false,
   })
+  const [status, setStatus] = useState<any>(null)
 
   // password fields
   const [pwd, setPwd] = useState({ current: '', next: '', confirm: '' })
@@ -104,9 +105,12 @@ const ProfilePage: React.FC = () => {
     let mounted = true
     ;(async () => {
       try {
-        // Load current data
-        const { data } = await axios.get('/api/user/me')
+        // Load current data (backend responds with { user, progressSummary })
+        const resp = await axios.get('/api/user/me')
         if (!mounted) return
+        const data = resp.data?.user || resp.data
+        const progress = resp.data?.progressSummary || null
+
         setProfile((p) => ({
           ...p,
           name: data?.name ?? p.name,
@@ -119,8 +123,11 @@ const ProfilePage: React.FC = () => {
           notifyProduct: data?.notifyProduct ?? p.notifyProduct,
         }))
         setAvatarPreview(data?.avatarUrl || null)
-      } catch {
+        setStatus({ user: data, progress })
+      } catch (err) {
         // non-blocking
+        // eslint-disable-next-line no-console
+        console.debug('Profile load failed:', err)
       } finally {
         if (mounted) setLoading(false)
       }
@@ -230,7 +237,18 @@ const ProfilePage: React.FC = () => {
         <div className={ui.container}>
           <div className="mb-6 flex items-center justify-between">
             <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">Profile Settings</h1>
-            <span className={ui.badge}>Secure & Private</span>
+              <span className={ui.badge}>Secure & Private</span>
+              {/* Status summary fetched from backend */}
+              <div className="ms-4">
+                <div className="text-sm text-gray-500">Account status</div>
+                <div className="flex items-center gap-2 mt-1">
+                  <div className="text-xs text-gray-700">{status?.user?.role ? status.user.role.toUpperCase() : 'GUEST'}</div>
+                  <div className="text-xs text-gray-500">•</div>
+                  <div className="text-xs text-gray-500">Streak: {status?.progress?.consecutiveDays ?? '-'}</div>
+                  <div className="text-xs text-gray-500">•</div>
+                  <div className="text-xs text-gray-500">Days: {status?.progress?.totalDays ?? '-'}</div>
+                </div>
+              </div>
           </div>
 
           {toast && (
@@ -307,6 +325,24 @@ const ProfilePage: React.FC = () => {
                     required
                   />
                   <p className={ui.help}>Use your sign-in email. You may verify changes via email.</p>
+                </div>
+                {/* Account status below email */}
+                <div className="mt-3">
+                  <div className="text-xs text-gray-500 mb-1">Account status</div>
+                  {status?.user?.role === 'premium' ? (
+                    <div className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold text-white bg-gradient-to-r from-indigo-600 to-purple-600 shadow-sm">
+                      <CheckCircle2 className="h-4 w-4" />
+                      <span>Premium</span>
+                    </div>
+                  ) : status?.user?.role === 'free' ? (
+                    <div className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold text-gray-700 bg-white ring-1 ring-gray-200">
+                      <span className="text-xs font-medium">Free</span>
+                    </div>
+                  ) : (
+                    <div className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold text-gray-500 bg-white ring-1 ring-gray-100">
+                      <span>Guest</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
