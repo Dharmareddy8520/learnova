@@ -1,7 +1,18 @@
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { useEffect } from 'react'
+import { useAuth } from '../contexts/AuthContext'
 import { Brain, BookOpen, Zap, Shield, ArrowRight } from 'lucide-react'
 
 const LandingPage = () => {
+  const { user, isLoading } = useAuth()
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    // If auth check finished and user is logged in, redirect to dashboard
+    if (!isLoading && user) {
+      navigate('/dashboard')
+    }
+  }, [user, isLoading, navigate])
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 to-white">
       {/* Navigation */}
@@ -13,15 +24,24 @@ const LandingPage = () => {
               <span className="ml-2 text-xl font-bold text-gray-900">Learnova</span>
             </div>
             <div className="flex items-center space-x-4">
-              <Link to="/login" className="text-gray-600 hover:text-gray-900">
-                Sign In
-              </Link>
+              {!user && (
+                <>
+                  <Link to="/login" className="text-gray-600 hover:text-gray-900">
+                    Sign In
+                  </Link>
+                  <Link to="/signup" className="btn btn-primary">
+                    Get Started
+                  </Link>
+                </>
+              )}
               <Link to="/tools" className="text-gray-600 hover:text-gray-900">
                 Tools
               </Link>
-              <Link to="/signup" className="btn btn-primary">
-                Get Started
-              </Link>
+              {user && (
+                <Link to="/dashboard" className="text-gray-600 hover:text-gray-900">
+                  Dashboard
+                </Link>
+              )}
             </div>
           </div>
         </div>

@@ -35,11 +35,42 @@ if (process.env.NODE_ENV === 'production') {
   app.set('trust proxy', 1);
 }
 
-// Body parsing middleware
-app.use(express.json());
+// Body parsing middleware (capture raw body for debugging JSON parse errors)
+app.use(express.json({
+  limit: '100kb',
+  // verify signature expects (req,res,buf,encoding: string)
+  verify: (req: any, res: any, buf: Buffer, encoding: string) => {
+    try {
+      req.rawBody = buf.toString((encoding as BufferEncoding) || 'utf8');
+    } catch (e) {
+      req.rawBody = undefined;
+    }
+  }
+}));
 app.use(express.urlencoded({ extended: true }));
 
+// JSON parse error handler (body-parser)
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (err && (err instanceof SyntaxError || err.type === 'entity.parse.failed')) {
+    console.error('JSON parse error:', err.message);
+    // log rawBody at debug level to avoid leaking in production logs
+    console.debug('Raw request body (truncated):', (req as any).rawBody ? String((req as any).rawBody).slice(0, 1000) : undefined);
+    return res.status(400).json({ error: 'Invalid JSON payload', details: err.message });
+  }
+  next(err);
+});
+
 // Session configuration
+// Allow overriding cookie security and sameSite behavior via env vars so
+// running locally while NODE_ENV=production (or testing with http) still works.
+const isProduction = process.env.NODE_ENV === 'production';
+const sessionCookieSecure = process.env.SESSION_COOKIE_SECURE
+  ? process.env.SESSION_COOKIE_SECURE === 'true'
+  : isProduction; // default: secure in production
+const sessionCookieSameSite = process.env.SESSION_COOKIE_SAMESITE || (isProduction ? 'none' : 'lax');
+const sessionMaxAge = Number(process.env.SESSION_MAX_AGE_MS || String(1000 * 60 * 60 * 24 * 30));
+const sessionTtl = Number(process.env.SESSION_TTL_SECONDS || String(60 * 60 * 24 * 30));
+
 app.use(session({
   secret: process.env.SESSION_SECRET || 'fallback-secret-key',
   resave: false,
@@ -47,24 +78,33 @@ app.use(session({
   store: MongoStore.create({
     mongoUrl: process.env.MONGO_URI || 'mongodb://localhost:27017/learnova',
     touchAfter: 24 * 3600, // lazy session update
-    // Set TTL for sessions in seconds (e.g., 30 days)
-    ttl: Number(process.env.SESSION_TTL_SECONDS || String(60 * 60 * 24 * 30)),
+    // Set TTL for sessions in seconds
+    ttl: sessionTtl,
   }),
   cookie: {
-    secure: process.env.NODE_ENV === 'production',
+    secure: sessionCookieSecure,
     httpOnly: true,
-    // In production we need cross-site cookies (SameSite=None) because
-    // the frontend is hosted on a separate origin (Vercel) and we rely on
-    // cookies to be sent for authentication. Locally use 'lax' for safety.
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-    // Make sessions last longer by default (30 days)
-    maxAge: Number(process.env.SESSION_MAX_AGE_MS || String(1000 * 60 * 60 * 24 * 30)),
-    // Refresh the session expiration on each response
-    // Note: express-session's 'rolling' option is set below
-  }
-  ,
+    sameSite: sessionCookieSameSite as any,
+    maxAge: sessionMaxAge,
+  },
   rolling: true,
 }));
+
+// Lightweight session debug logging (remove or lower verbosity in production)
+app.use((req, res, next) => {
+  try {
+    // only log minimal info to avoid leaking sensitive data
+    console.debug('Session debug:', {
+      sessionID: (req as any).sessionID,
+      hasSession: !!(req as any).session,
+      cookie: ((req as any).session && (req as any).session.cookie) ? { maxAge: (req as any).session.cookie.maxAge } : undefined,
+      path: req.path,
+    });
+  } catch (e) {
+    // ignore
+  }
+  next();
+});
 
 // Passport middleware
 app.use(passport.initialize());

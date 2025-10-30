@@ -64,8 +64,19 @@ router.post('/register', async (req, res) => {
 
 // Login endpoint
 router.post('/login', (req, res, next) => {
-  const { email, password } = loginSchema.parse(req.body);
-  
+  let email: string | undefined;
+  let password: string | undefined;
+  try {
+    const parsed = loginSchema.parse(req.body);
+    email = parsed.email;
+    password = parsed.password;
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Validation failed', details: error.errors });
+    }
+    return res.status(400).json({ error: 'Invalid login payload' });
+  }
+
   passport.authenticate('local', (err: any, user: any, info: any) => {
     if (err) {
       return res.status(500).json({ error: 'Authentication error' });

@@ -1,5 +1,8 @@
+// src/components/Sidebar.tsx
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { LogIn, LogOut, User as UserIcon } from "lucide-react";
+import { useAuth } from "../contexts/AuthContext";
 
 type Item = { label: string; path: string };
 
@@ -14,6 +17,7 @@ const items: Item[] = [
 export default function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user, logout } = useAuth(); // <-- auth
   const [open, setOpen] = useState(false); // mobile drawer
 
   // Close drawer when route changes
@@ -34,6 +38,16 @@ export default function Sidebar() {
       {it.label}
     </button>
   );
+
+  const handleLogout = async () => {
+    try {
+      await logout?.();
+    } finally {
+      // Optional: clear local usage counters here if you keep them in localStorage
+      // localStorage.removeItem('usage_counters');
+      navigate("/login");
+    }
+  };
 
   return (
     <>
@@ -86,26 +100,88 @@ export default function Sidebar() {
             <span className="block w-5 h-0.5 bg-gray-700 -rotate-45 -translate-y-[6px]" />
           </button>
         </div>
+
         <nav className="mt-2 space-y-1">
           {items.map((it) => (
             <NavButton key={it.path} it={it} />
           ))}
         </nav>
+
+        {/* mobile footer actions */}
+        <div className="mt-6 pt-4 border-t border-gray-200 space-y-2">
+          {user ? (
+            <>
+              <button
+                onClick={() => navigate("/account")}
+                className="w-full flex items-center gap-2 rounded-md px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+              >
+                <UserIcon className="h-4 w-4" />
+                Profile
+              </button>
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center gap-2 rounded-md px-4 py-2 text-sm text-rose-600 hover:bg-rose-50"
+              >
+                <LogOut className="h-4 w-4" />
+                Logout
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => navigate("/login")}
+              className="w-full flex items-center gap-2 rounded-md px-4 py-2 text-sm text-indigo-700 hover:bg-indigo-50"
+            >
+              <LogIn className="h-4 w-4" />
+              Login
+            </button>
+          )}
+        </div>
       </aside>
 
       {/* === DESKTOP FIXED SIDEBAR === */}
-      <aside className="hidden md:block fixed left-0 top-0 h-screen w-64 border-r border-gray-200 bg-white">
+      <aside className="hidden md:flex md:flex-col fixed left-0 top-0 h-screen w-64 border-r border-gray-200 bg-white">
         <div className="px-6 py-5">
           <h2 className="text-lg font-semibold text-gray-900">Study Buddy AI</h2>
         </div>
-        <nav className="mt-2 space-y-1 px-2">
+
+        <nav className="mt-2 space-y-1 px-2 overflow-y-auto">
           {items.map((it) => (
             <NavButton key={it.path} it={it} />
           ))}
         </nav>
+
+        {/* desktop footer actions pinned to bottom */}
+        <div className="mt-auto px-2 pb-4 pt-2 border-t border-gray-200 space-y-2">
+          {user ? (
+            <>
+              <button
+                onClick={() => navigate("/account")}
+                className="w-full flex items-center gap-2 rounded-md px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+              >
+                <UserIcon className="h-4 w-4" />
+                Profile
+              </button>
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center gap-2 rounded-md px-4 py-2 text-sm text-rose-600 hover:bg-rose-50"
+              >
+                <LogOut className="h-4 w-4" />
+                Logout
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => navigate("/login")}
+              className="w-full flex items-center gap-2 rounded-md px-4 py-2 text-sm text-indigo-700 hover:bg-indigo-50"
+            >
+              <LogIn className="h-4 w-4" />
+              Login
+            </button>
+          )}
+        </div>
       </aside>
 
-      {/* === MOBILE BOTTOM TABS (optional) === */}
+      {/* === MOBILE BOTTOM TABS === */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-200">
         <div className="grid grid-cols-5">
           {items.map((it) => (
@@ -121,10 +197,26 @@ export default function Sidebar() {
                     : "text-gray-600"
                 }
               >
-                {it.label.split(" ")[0]} {/* shorter label on mobile */}
+                {it.label.split(" ")[0]}
               </span>
             </button>
           ))}
+          {/* extra tab slot becomes Login/Logout on mobile */}
+          {user ? (
+            <button
+              onClick={handleLogout}
+              className="py-2.5 flex flex-col items-center justify-center text-xs text-rose-600"
+            >
+              Logout
+            </button>
+          ) : (
+            <button
+              onClick={() => navigate("/login")}
+              className="py-2.5 flex flex-col items-center justify-center text-xs text-indigo-600"
+            >
+              Login
+            </button>
+          )}
         </div>
       </nav>
     </>
