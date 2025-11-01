@@ -69,14 +69,140 @@ router.post('/create-portal-session', requireAuth, async (req: Request, res: Res
     const user: any = (req as any).user
     if (!user.stripeCustomerId) return res.status(400).json({ error: 'No Stripe customer associated with user' })
     const returnUrl = `${appBase}/account`
-    const session = await stripe.billingPortal.sessions.create({
-      customer: user.stripeCustomerId,
-      return_url: returnUrl,
-    })
+    let session
+    try {
+      session = await stripe.billingPortal.sessions.create({
+        customer: user.stripeCustomerId,
+        return_url: returnUrl,
+      })
+    } catch (err: any) {
+      // Common cause: Billing Portal not configured in Stripe Dashboard (test mode).
+      console.error('create-portal-session error (stripe):', err && err.message ? err.message : err)
+      const help = 'Stripe Billing Portal not configured. Visit https://dashboard.stripe.com/test/settings/billing/portal and save your portal configuration in test mode.'
+      return res.status(500).json({ error: err?.message || 'Failed to create portal session', help })
+    }
     return res.json({ url: session.url })
   } catch (err: any) {
     console.error('create-portal-session error:', err)
     return res.status(500).json({ error: err?.message || 'Failed to create portal session' })
+  }
+})
+
+// GET /api/billing/info
+// Returns customer summary, default card (if any) and subscription next billing date/status
+router.get('/info', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const user: any = (req as any).user
+    if (!user.stripeCustomerId) return res.status(404).json({ error: 'No Stripe customer associated with user' })
+
+    // Retrieve customer
+    const customer = await stripe.customers.retrieve(user.stripeCustomerId)
+
+    // Try to find a default card/payment method from multiple possible sources:
+    // 1) customer.invoice_settings.default_payment_method (PaymentMethod)
+    // 2) paymentMethods.list for card-type PaymentMethods
+    // 3) legacy customer.sources (cards attached as sources)
+    // 4) fallback to payment method referenced on an upcoming invoice
+    let paymentMethod: Stripe.PaymentMethod | null = null
+    try {
+      const defaultPm = (customer as any).invoice_settings?.default_payment_method
+      if (defaultPm) {
+        try {
+          paymentMethod = await stripe.paymentMethods.retrieve(defaultPm as string)
+        } catch (e) {
+          // ignore and fall through
+          console.debug('Failed to retrieve invoice_settings.default_payment_method:', e)
+        }
+      }
+
+      if (!paymentMethod) {
+        const pmList = await stripe.paymentMethods.list({ customer: user.stripeCustomerId, type: 'card', limit: 1 })
+        paymentMethod = pmList.data?.[0] || null
+      }
+
+      // Legacy customers may have sources (card objects) — use first source as fallback
+      if (!paymentMethod && (customer as any).sources && Array.isArray((customer as any).sources.data) && (customer as any).sources.data.length) {
+        const src = (customer as any).sources.data[0]
+        // create a PaymentMethod-like shape for frontend consumption
+        paymentMethod = {
+          id: src.id,
+          card: {
+            brand: src.brand,
+            last4: src.last4,
+            exp_month: src.exp_month,
+            exp_year: src.exp_year,
+          } as any,
+          billing_details: { name: src.name } as any,
+        } as unknown as Stripe.PaymentMethod
+      }
+    } catch (e) {
+      // ignore payment method retrieval errors
+      console.debug('Failed to load payment method:', e)
+    }
+
+    // Subscription: prefer user's stored subscription id, fallback to latest active subscription
+    let subscription: Stripe.Subscription | null = null
+    try {
+      if (user.stripeSubscriptionId) {
+        subscription = await stripe.subscriptions.retrieve(user.stripeSubscriptionId)
+      } else {
+        const subs = await stripe.subscriptions.list({ customer: user.stripeCustomerId, limit: 1 })
+        if (subs.data && subs.data.length) subscription = subs.data[0]
+      }
+    } catch (e) {
+      console.debug('Failed to load subscription details:', e)
+    }
+
+    // Try to retrieve the upcoming invoice to determine next billing date (stronger fallback)
+    let nextBillingDate: Date | null = null
+    try {
+      const upcoming = await stripe.invoices.retrieveUpcoming({ customer: user.stripeCustomerId })
+      if (upcoming && (upcoming as any).period_end) {
+        nextBillingDate = new Date((upcoming as any).period_end * 1000)
+      } else if (upcoming && (upcoming as any).next_payment_attempt) {
+        nextBillingDate = new Date((upcoming as any).next_payment_attempt * 1000)
+      }
+      // Also consider subscription's current_period_end if present
+      if (!nextBillingDate && subscription && subscription.current_period_end) {
+        nextBillingDate = new Date(subscription.current_period_end * 1000)
+      }
+    } catch (e) {
+      // retrieveUpcoming will throw if there is no upcoming invoice; ignore
+      // console.debug('No upcoming invoice or failed to retrieve upcoming invoice:', e)
+    }
+
+    const out = {
+      customer: {
+        id: user.stripeCustomerId,
+        email: (customer as any).email || null,
+        name: (customer as any).name || null,
+      },
+      paymentMethod: paymentMethod
+        ? {
+            id: paymentMethod.id,
+            brand: (paymentMethod.card as any)?.brand || null,
+            last4: (paymentMethod.card as any)?.last4 || null,
+            exp_month: (paymentMethod.card as any)?.exp_month || null,
+            exp_year: (paymentMethod.card as any)?.exp_year || null,
+            name: (paymentMethod.billing_details as any)?.name || null,
+          }
+        : null,
+      subscription: subscription
+        ? {
+            id: subscription.id,
+            status: subscription.status,
+            currentPeriodEnd: subscription.current_period_end ? new Date(subscription.current_period_end * 1000) : null,
+            price: subscription.items?.data?.[0]?.price?.id || null,
+            interval: subscription.items?.data?.[0]?.price?.recurring?.interval || null,
+          }
+        : null,
+      nextBillingDate: nextBillingDate,
+    }
+
+    return res.json(out)
+  } catch (err: any) {
+    console.error('billing.info error:', err)
+    return res.status(500).json({ error: err?.message || 'Failed to load billing info' })
   }
 })
 

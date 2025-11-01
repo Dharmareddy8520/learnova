@@ -27,7 +27,17 @@ export const UsageOverview: React.FC = () => {
     }
     // Only run this on mount — refreshUser is stable (useCallback) so it's safe to include
     doRefresh()
-    return () => { mounted = false }
+    // Listen for usage:updated events from other hook instances and refresh when they occur
+    const handler = () => { if (mounted) doRefresh() }
+    window.addEventListener('usage:updated', handler)
+    // Also refresh when window gains focus (useful after returning from Stripe)
+    const onFocus = () => { if (mounted) doRefresh() }
+    window.addEventListener('focus', onFocus)
+    return () => {
+      mounted = false
+      window.removeEventListener('usage:updated', handler)
+      window.removeEventListener('focus', onFocus)
+    }
     // refreshUser is stable, getUsed/getLimit will change as user updates; we purposely
     // do NOT list them here to avoid re-running the effect whenever usage changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps

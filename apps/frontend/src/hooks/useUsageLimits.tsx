@@ -37,6 +37,12 @@ export function useUsageLimits() {
     try {
       const resp = await axios.get('/api/usage')
       setServerUsage(resp.data)
+      try {
+        // Notify other parts of the app that server usage updated so they can refresh their own hook instances
+        window.dispatchEvent(new CustomEvent('usage:updated', { detail: resp.data }))
+      } catch (e) {
+        // ignore
+      }
       return resp.data
     } catch (e) {
       // ignore — server may be unreachable for guests

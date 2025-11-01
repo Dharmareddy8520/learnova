@@ -85,6 +85,9 @@ const ProfilePage: React.FC = () => {
     notifyProduct: false,
   })
   const [status, setStatus] = useState<any>(null)
+  const [portalHelp, setPortalHelp] = useState<string | null>(null)
+  const [billingInfo, setBillingInfo] = useState<any>(null)
+  const [showBillingModal, setShowBillingModal] = useState(false)
 
   // password fields
   const [pwd, setPwd] = useState({ current: '', next: '', confirm: '' })
@@ -124,6 +127,17 @@ const ProfilePage: React.FC = () => {
         }))
         setAvatarPreview(data?.avatarUrl || null)
         setStatus({ user: data, progress })
+        // Fetch billing info if user exists
+        if (data && data._id) {
+          try {
+            const b = await axios.get('/api/billing/info')
+            setBillingInfo(b.data)
+          } catch (e) {
+            // non-blocking: if billing info isn't available, we silently ignore
+            // eslint-disable-next-line no-console
+            console.debug('No billing info available', e)
+          }
+        }
       } catch (err) {
         // non-blocking
         // eslint-disable-next-line no-console
@@ -138,6 +152,16 @@ const ProfilePage: React.FC = () => {
   const showToast = (kind: 'success' | 'error', msg: string) => {
     setToast({ kind, msg })
     setTimeout(() => setToast(null), 3500)
+  }
+
+  const formatDate = (d: string | number | Date | null) => {
+    if (!d) return '-'
+    const dt = typeof d === 'string' || typeof d === 'number' ? new Date(d) : d
+    try {
+      return dt.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+    } catch {
+      return dt.toString()
+    }
   }
 
   const onPickAvatar = () => fileRef.current?.click()
@@ -255,6 +279,24 @@ const ProfilePage: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-3">
+              {/* Billing summary (Netflix-style) */}
+                  {billingInfo?.subscription && (
+                <div className="hidden md:flex flex-col items-end text-right">
+                  <div className="rounded-xl bg-gray-900 text-white px-5 py-3 shadow-md w-64">
+                    <div className="text-xs text-gray-300">Next billing</div>
+                        <div className="mt-1 text-xl font-semibold">{formatDate(billingInfo.nextBillingDate || billingInfo.subscription.currentPeriodEnd)}</div>
+                    <div className="mt-2 text-sm text-gray-300">{billingInfo.subscription.status?.toUpperCase() || ''}</div>
+                    {billingInfo.paymentMethod && (
+                      <div className="mt-3 flex items-center justify-between">
+                        <div>
+                          <div className="text-sm">{(billingInfo.paymentMethod.name) || billingInfo.customer.email}</div>
+                          <div className="text-xs text-gray-400">{billingInfo.paymentMethod.brand} •••• {billingInfo.paymentMethod.last4}</div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
               {/* Upgrade / Manage Billing actions */}
               {user ? (
                 status?.user?.role !== 'premium' ? (
@@ -278,13 +320,25 @@ const ProfilePage: React.FC = () => {
                   <button
                     type="button"
                     onClick={async () => {
+                      // Instead of redirecting immediately, show an in-app billing modal with details
                       try {
-                        const resp = await axios.post('/api/billing/create-portal-session')
-                        const url = resp.data?.url
-                        if (url) window.location.href = url
-                        else showToast('error', 'Failed to open billing portal')
+                        if (!billingInfo) {
+                          const resp = await axios.get('/api/billing/info')
+                          setBillingInfo(resp.data)
+                        }
+                        setShowBillingModal(true)
                       } catch (err: any) {
-                        showToast('error', err?.response?.data?.error || 'Failed to open billing portal')
+                        // If billing info can't be loaded, still attempt to create portal (fallback)
+                        try {
+                          const resp = await axios.post('/api/billing/create-portal-session')
+                          const url = resp.data?.url
+                          if (url) window.location.href = url
+                          else showToast('error', 'Failed to open billing portal')
+                        } catch (e: any) {
+                          const help = e?.response?.data?.help
+                          if (help) setPortalHelp(help)
+                          else showToast('error', e?.response?.data?.error || 'Failed to open billing portal')
+                        }
                       }
                     }}
                     className={`${ui.btn} ${ui.ghost} px-4 py-2`}
@@ -582,6 +636,82 @@ const ProfilePage: React.FC = () => {
           </form>
         </div>
       </main>
+      {/* Billing portal help modal (shown when backend returns a `help` message) */}
+      {portalHelp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setPortalHelp(null)} />
+          <div className="relative bg-white rounded-2xl shadow-lg max-w-lg w-full mx-4 p-6">
+            <h3 className="text-lg font-semibold text-gray-900">Billing portal not configured</h3>
+            <p className="mt-2 text-sm text-gray-700">{portalHelp}</p>
+            <div className="mt-4 flex items-center justify-end gap-3">
+              <a
+                href="https://dashboard.stripe.com/settings/billing/portal"
+                target="_blank"
+                rel="noreferrer"
+                className={`${ui.btn} ${ui.primary} px-4 py-2`}
+              >
+                Open Stripe Dashboard
+              </a>
+              <button type="button" onClick={() => setPortalHelp(null)} className={`${ui.btn} ${ui.ghost} px-4 py-2`}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Billing details modal (show before redirecting to Stripe Portal) */}
+      {showBillingModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowBillingModal(false)} />
+          <div className="relative bg-white rounded-2xl shadow-lg max-w-xl w-full mx-4 p-6">
+            <h3 className="text-lg font-semibold text-gray-900">Manage Billing</h3>
+            <p className="mt-2 text-sm text-gray-700">Review your current payment method and upcoming billing.</p>
+
+            <div className="mt-4 grid grid-cols-1 gap-3">
+              <div className="rounded-lg border p-4">
+                <div className="text-xs text-gray-500">Cardholder</div>
+                <div className="mt-1 font-medium">{billingInfo?.paymentMethod?.name || billingInfo?.customer?.email || '-'}</div>
+                <div className="text-sm text-gray-500 mt-1">{billingInfo?.paymentMethod ? `${billingInfo.paymentMethod.brand} •••• ${billingInfo.paymentMethod.last4}` : 'No card on file'}</div>
+              </div>
+
+              <div className="rounded-lg border p-4">
+                <div className="text-xs text-gray-500">Next billing date</div>
+                <div className="mt-1 font-medium">{formatDate(billingInfo?.nextBillingDate || billingInfo?.subscription?.currentPeriodEnd)}</div>
+                <div className="text-sm text-gray-500 mt-1">Status: {billingInfo?.subscription?.status || '—'}</div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowBillingModal(false)}
+                className={`${ui.btn} ${ui.ghost} px-4 py-2`}
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const resp = await axios.post('/api/billing/create-portal-session')
+                    const url = resp.data?.url
+                    if (url) window.location.href = url
+                    else showToast('error', 'Failed to open billing portal')
+                  } catch (err: any) {
+                    const help = err?.response?.data?.help
+                    setShowBillingModal(false)
+                    if (help) setPortalHelp(help)
+                    else showToast('error', err?.response?.data?.error || 'Failed to open billing portal')
+                  }
+                }}
+                className={`${ui.btn} ${ui.primary} px-4 py-2`}
+              >
+                Open Billing Portal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

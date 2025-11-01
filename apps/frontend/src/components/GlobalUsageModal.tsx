@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { UsageLimitModal } from './UsageLimitModal'
 import { useNavigate } from 'react-router-dom'
 import { useUsageLimits } from '../hooks/useUsageLimits'
+import axios from 'axios'
 
 export const GlobalUsageModal: React.FC = () => {
   const [open, setOpen] = useState(false)
@@ -44,9 +45,27 @@ export const GlobalUsageModal: React.FC = () => {
     navigate('/login')
   }
 
-  const handleUpgrade = () => {
+  const handleUpgrade = async () => {
     handleClose()
-    navigate('/account')
+    try {
+      // Request a Checkout session from the backend and redirect to Stripe Checkout
+      const resp = await axios.post('/api/billing/create-checkout-session')
+      const url = resp.data?.url
+      if (url) {
+        window.location.href = url
+        return
+      }
+      // fallback: navigate to account page which also has billing actions
+      navigate('/account')
+    } catch (err: any) {
+      // If not authenticated, send user to login; otherwise fallback to account page
+      if (err?.response?.status === 401) {
+        navigate('/login')
+      } else {
+        console.error('Failed to start checkout session', err)
+        navigate('/account')
+      }
+    }
   }
 
   if (!open || !payload) return null

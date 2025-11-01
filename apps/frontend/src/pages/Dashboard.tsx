@@ -67,6 +67,7 @@ export default function Dashboard() {
   const [summary, setSummary] = useState("");
   const [summarizing, setSummarizing] = useState(false);
   const [sumError, setSumError] = useState<string | null>(null);
+  const [sumWarning, setSumWarning] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -98,10 +99,12 @@ export default function Dashboard() {
     setSummarizing(true);
     setSummary("");
     setSumError(null);
+    setSumWarning(null);
     try {
-      const MAX_LEN = 10000;
-      const payload = { text: text.length > MAX_LEN ? text.slice(0, MAX_LEN) : text };
-      const { data } = await axios.post("/api/summarize", payload, {
+      const MAX_LEN = 2000 // approx 512 tokens (1k-2k chars)
+      const payloadText = text.length > MAX_LEN ? text.slice(0, MAX_LEN) : text
+      if (text.length > MAX_LEN) setSumWarning(`Input truncated to ${MAX_LEN} characters to fit model token limits.`)
+      const { data } = await axios.post("/api/summarize", { text: payloadText }, {
         headers: { "Content-Type": "application/json" },
         timeout: 30000,
       });
@@ -183,6 +186,11 @@ export default function Dashboard() {
                 {sumError && (
                   <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
                     {sumError}
+                  </div>
+                )}
+                {sumWarning && (
+                  <div className="rounded-md border border-yellow-200 bg-yellow-50 px-3 py-2 text-sm text-yellow-800 mt-2">
+                    {sumWarning}
                   </div>
                 )}
               </form>

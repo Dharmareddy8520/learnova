@@ -7,6 +7,7 @@ const MLTools: React.FC = () => {
   const [text, setText] = useState('')
   const [loading, setLoading] = useState(false)
   const [summary, setSummary] = useState<string | null>(null)
+  const [summaryWarning, setSummaryWarning] = useState<string | null>(null)
   const [quizResult, setQuizResult] = useState<any>(null)
   const [cards, setCards] = useState<any>(null)
   const [quizCount, setQuizCount] = useState<number>(5)
@@ -17,8 +18,17 @@ const MLTools: React.FC = () => {
     setQuizResult(null)
     setCards(null)
     try {
-  const out = await summarize(text)
-  setSummary(out.summary || String(out))
+      const MAX_SUMMARY_CHARS = 2000 // ~512 tokens (1k-2k chars) safe upper bound for Flan-T5-Large
+      let payloadText = text
+      if (text.length > MAX_SUMMARY_CHARS) {
+        payloadText = text.slice(0, MAX_SUMMARY_CHARS)
+        setSummaryWarning(`Input was truncated to ${MAX_SUMMARY_CHARS} characters to fit the model token limit.`)
+      } else {
+        setSummaryWarning(null)
+      }
+
+      const out = await summarize(payloadText)
+      setSummary(out.summary || String(out))
     } catch (e: any) {
       setSummary(`Error: ${e.message}`)
     } finally { setLoading(false) }
@@ -52,6 +62,12 @@ const MLTools: React.FC = () => {
     <div className="max-w-4xl mx-auto p-6">
       <h2 className="text-2xl font-bold mb-4">ML Tools</h2>
       <textarea value={text} onChange={(e) => setText(e.target.value)} className="w-full p-3 border rounded mb-4 h-48" />
+
+      {summaryWarning && (
+        <div className="mb-2 rounded-md border border-yellow-200 bg-yellow-50 px-3 py-2 text-sm text-yellow-800">
+          {summaryWarning}
+        </div>
+      )}
 
       <div className="flex gap-3 mb-4 items-center">
         <button onClick={doSummarize} className="btn btn-primary" disabled={loading || !text}>Summarize</button>
