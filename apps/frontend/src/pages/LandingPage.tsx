@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { Brain, BookOpen, Zap, Shield, ArrowRight } from 'lucide-react'
 
 const LandingPage = () => {
-  const { user, isLoading } = useAuth()
+  const { user, isLoading, logout } = useAuth()
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -63,7 +63,18 @@ const LandingPage = () => {
               Start Learning Free
               <ArrowRight className="ml-2 h-5 w-5" />
             </Link>
-            <button className="btn btn-outline text-lg px-8 py-3">
+            <button
+              className="btn btn-outline text-lg px-8 py-3"
+              onClick={async () => {
+                // Enter demo mode: clear any session and mark demo flag, then navigate to tools
+                try {
+                  await logout()
+                } catch (e) {
+                  // ignore
+                }
+                navigate('/tools')
+              }}
+            >
               Watch Demo
             </button>
           </div>
@@ -131,6 +142,57 @@ const LandingPage = () => {
               </p>
             </div>
           </div>
+
+            {/* Pricing Section */}
+            <div className="py-16 bg-gray-50">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div className="text-center mb-8">
+                  <h2 className="text-3xl font-bold text-gray-900 mb-2">Plans & Pricing</h2>
+                  <p className="text-gray-600">Choose a plan that fits your learning needs — start free or upgrade for unlimited access.</p>
+                </div>
+
+                <div className="grid md:grid-cols-3 gap-6">
+                  <div className="rounded-2xl border border-gray-200 bg-white p-6 text-center">
+                    <div className="text-sm text-gray-500">Guest</div>
+                    <div className="mt-2 text-2xl font-bold">Free</div>
+                    <p className="mt-3 text-sm text-gray-600">Try basic features with limited daily usage.</p>
+                    <ul className="mt-3 text-sm text-gray-600 list-disc list-inside">
+                      <li>3 free tries per feature</li>
+                      <li>Quick summaries & basic tools</li>
+                    </ul>
+                    <div className="mt-4">
+                      <button className="btn btn-outline" onClick={async () => { try { await logout() } catch {} navigate('/tools') }}>Try demo</button>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-gray-200 bg-white p-6 text-center">
+                    <div className="text-sm text-gray-500">Free Tier</div>
+                    <div className="mt-2 text-2xl font-bold">Free</div>
+                    <p className="mt-3 text-sm text-gray-600">Create an account for more daily usage and saved progress.</p>
+                    <ul className="mt-3 text-sm text-gray-600 list-disc list-inside">
+                      <li>5 free tries per feature</li>
+                      <li>Streaks & saved history</li>
+                    </ul>
+                    <div className="mt-4">
+                      <Link to="/signup" className="btn btn-primary">Create account</Link>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-gray-200 bg-white p-6 text-center">
+                    <div className="text-sm text-gray-500">Premium</div>
+                    <div className="mt-2 text-2xl font-bold">Unlimited</div>
+                    <p className="mt-3 text-sm text-gray-600">Unlimited access to AI tools and priority usage.</p>
+                    <ul className="mt-3 text-sm text-gray-600 list-disc list-inside">
+                      <li>Unlimited usage</li>
+                      <li>Priority performance</li>
+                    </ul>
+                    <div className="mt-4">
+                      <Link to="/signup" className="btn btn-yellow">Upgrade</Link>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
         </div>
       </div>
 
@@ -157,7 +219,7 @@ const LandingPage = () => {
             <span className="ml-2 text-lg font-semibold">Learnova</span>
           </div>
           <p className="text-center text-gray-400 mt-4">
-            © 2024 Learnova. All rights reserved.
+            © 2025 Learnova. All rights reserved.
           </p>
         </div>
       </footer>

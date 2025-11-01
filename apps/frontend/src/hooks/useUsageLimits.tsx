@@ -21,6 +21,7 @@ export function useUsageLimits() {
   const guestLimit = Number(V.VITE_GUEST_LIMIT ?? 3)
   const freeLimit = Number(V.VITE_FREE_TIER_LIMIT ?? 5)
   const premiumLimit = Number(V.VITE_PREMIUM_TIER_LIMIT ?? -1)
+  
 
   const getLimitForRole = useCallback((role?: string) => {
     if (!role) return guestLimit
@@ -111,7 +112,7 @@ export function useUsageLimits() {
       }
     }
 
-    // guest: localStorage with date reset
+  // guest: localStorage with date reset
     try {
       const raw = localStorage.getItem('usage')
       let parsed: any = { date: todayStr(), counts: {} }
@@ -122,7 +123,7 @@ export function useUsageLimits() {
         parsed = { date: todayStr(), counts: {} }
       }
       parsed.counts[feature] = Number(parsed.counts[feature] || 0) + 1
-      localStorage.setItem('usage', JSON.stringify(parsed))
+  localStorage.setItem('usage', JSON.stringify(parsed))
         // also send a log to the backend so it appears in the server terminal (dev helper)
         try {
           await axios.post('/api/log/guest-usage', { feature, used: parsed.counts[feature] })
