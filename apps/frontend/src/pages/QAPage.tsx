@@ -1,5 +1,5 @@
 // src/pages/QAPage.tsx
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import axios from "axios";
 import { MessageSquare, Copy, Check } from "lucide-react";
 import AppSidebar from "../components/AppSidebar"; // ✅ add the global sidebar
@@ -41,28 +41,7 @@ export default function QAPage() {
     url: window.location.origin + '/qa',
   })
 
-  const last = history[0];
-
-  const confidence = useMemo(() => {
-    if (last?.score === undefined || last?.score === null) return null;
-    return (Number(last.score) * 100).toFixed(1) + "%";
-  }, [last]);
-
-  const renderHighlighted = (ctx: string, start?: number | null, end?: number | null) => {
-    if (typeof start !== "number" || typeof end !== "number" || start < 0 || end <= start || end > ctx.length) {
-      return <p className="whitespace-pre-wrap text-gray-800">{ctx}</p>;
-    }
-    const pre = ctx.slice(0, start);
-    const mid = ctx.slice(start, end);
-    const post = ctx.slice(end);
-    return (
-      <p className="whitespace-pre-wrap text-gray-800">
-        {pre}
-        <mark className="bg-yellow-200 rounded px-0.5">{mid}</mark>
-        {post}
-      </p>
-    );
-  };
+  
 
   const ask = async (e: React.FormEvent) => {
     e.preventDefault();
