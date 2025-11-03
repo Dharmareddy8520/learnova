@@ -4,6 +4,7 @@ import { useUsageLimits } from '../hooks/useUsageLimits'
 import { useAuth } from '../contexts/AuthContext'
 import QuizView from '../components/QuizView'
 import FlashcardsView from '../components/FlashcardsView'
+import usePageMeta from '../hooks/usePageMeta'
 
 const MLTools: React.FC = () => {
   const [text, setText] = useState('')
@@ -14,6 +15,12 @@ const MLTools: React.FC = () => {
   const [cards, setCards] = useState<any>(null)
   const [quizCount, setQuizCount] = useState<number>(5)
   const [flashCount, setFlashCount] = useState<number>(10)
+
+  usePageMeta({
+    title: 'Tools — Summarize, Quiz & Flashcards | Learnova',
+    description: 'Run summaries, generate quizzes, and make flashcards from any text. Fast, accurate, and easy to use.',
+    url: window.location.origin + '/tools',
+  })
 
   const doSummarize = async () => {
     setLoading(true)

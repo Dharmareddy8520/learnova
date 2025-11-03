@@ -3,6 +3,7 @@ import React, { useMemo, useState } from "react";
 import axios from "axios";
 import { MessageSquare, Copy, Check } from "lucide-react";
 import AppSidebar from "../components/AppSidebar"; // ✅ add the global sidebar
+import usePageMeta from '../hooks/usePageMeta'
 
 type QAItem = {
   question: string;
@@ -33,6 +34,12 @@ export default function QAPage() {
   const [history, setHistory] = useState<QAItem[]>([]);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  usePageMeta({
+    title: 'Ask — Learnova AI Q&A',
+    description: 'Paste a passage and ask questions about it. Get answers, confidence, and highlighted evidence.',
+    url: window.location.origin + '/qa',
+  })
 
   const last = history[0];
 

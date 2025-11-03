@@ -7,8 +7,8 @@ import {
   summarizeText,
   generateQuiz as hfGenerateQuiz,
   generateFlashcards as hfGenerateFlashcards,
+  generateAnswer,
 } from '../services/hf'
-import { generateAnswer } from '../services/hf'
 import { User } from '../models/User'
 
 dotenv.config()
@@ -180,8 +180,11 @@ router.post('/qa', async (req: Request, res: Response) => {
     })
 
     // If extractive model returned a very short span or low confidence, run a generative fallback
-    let finalAnswer = result?.answer ?? ''
-    let finalScore = result?.score ?? null
+  // explicit types to satisfy strict TS settings
+  let finalAnswer: string = result?.answer ?? ''
+  let finalScore: number | null = typeof result?.score === 'number' ? result!.score : null
+  let finalStart: number | null = typeof result?.start === 'number' ? result!.start : null
+  let finalEnd: number | null = typeof result?.end === 'number' ? result!.end : null
     const lowConfidence = (typeof finalScore === 'number' && finalScore < 0.35)
     const shortAnswer = typeof finalAnswer === 'string' && finalAnswer.trim().length < 30
     if (lowConfidence || shortAnswer) {
@@ -190,6 +193,9 @@ router.post('/qa', async (req: Request, res: Response) => {
         if (gen && gen.trim().length > 0) {
           finalAnswer = gen
           finalScore = null // generative answer doesn't have extractive score
+          // Clear extractive span when using generated answer to avoid misleading highlights
+          finalStart = null
+          finalEnd = null
         }
       } catch (e) {
         console.debug('Generative QA fallback failed:', (e as any)?.message || e)
@@ -203,8 +209,8 @@ router.post('/qa', async (req: Request, res: Response) => {
         return res.json({
           answer: finalAnswer,
           score: finalScore,
-          start: result?.start ?? null,
-          end: result?.end ?? null,
+          start: finalStart,
+          end: finalEnd,
           usage: { feature, used: r.used, limit: getLimitForRole(user.role) }
         })
       } catch (e) {
@@ -215,8 +221,8 @@ router.post('/qa', async (req: Request, res: Response) => {
     return res.json({
       answer: finalAnswer,
       score: finalScore,
-      start: result?.start ?? null,
-      end: result?.end ?? null,
+  start: finalStart,
+  end: finalEnd,
     })
   } catch (err: any) {
     console.error('[qa] error:', err)
@@ -330,17 +336,17 @@ Quiz:`
     }
 
     // HF fallback
-    const out = await hfGenerateQuiz(text, n)
+    const hfOut = await hfGenerateQuiz(text, n)
     const user2: any = (req as any).user
     if (user2 && typeof user2.incrementUsage === 'function') {
       try {
         const r = await user2.incrementUsage('quiz')
-        return res.json({ model: 'hf-fallback', quiz: out, usage: { feature: 'quiz', used: r.used, limit: getLimitForRole(user2.role) } })
+        return res.json({ model: 'hf-fallback', quiz: hfOut, usage: { feature: 'quiz', used: r.used, limit: getLimitForRole(user2.role) } })
       } catch (e) {
         console.debug('Failed to increment usage after quiz (hf):', e)
       }
     }
-    return res.json({ model: 'hf-fallback', quiz: out })
+    return res.json({ model: 'hf-fallback', quiz: hfOut })
   } catch (e: any) {
     console.error('Quiz generation failed:', e)
     return res.status(500).json({ error: e?.message || 'Quiz generation failed' })
@@ -426,17 +432,17 @@ Flashcards:`
     }
 
     // HF fallback
-    const out = await hfGenerateFlashcards(text, n)
+    const hfOut = await hfGenerateFlashcards(text, n)
     const user2: any = (req as any).user
     if (user2 && typeof user2.incrementUsage === 'function') {
       try {
         const r = await user2.incrementUsage('flashcards')
-        return res.json({ model: 'hf-fallback', flashcards: out, usage: { feature: 'flashcards', used: r.used, limit: getLimitForRole(user2.role) } })
+        return res.json({ model: 'hf-fallback', flashcards: hfOut, usage: { feature: 'flashcards', used: r.used, limit: getLimitForRole(user2.role) } })
       } catch (e) {
         console.debug('Failed to increment usage after flashcards (hf):', e)
       }
     }
-    return res.json({ model: 'hf-fallback', flashcards: out })
+    return res.json({ model: 'hf-fallback', flashcards: hfOut })
   } catch (e: any) {
     console.error('Flashcard generation failed:', e)
     return res.status(500).json({ error: e?.message || 'Flashcard generation failed' })

@@ -2,6 +2,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { Brain, BookOpen, Zap, Shield, ArrowRight } from 'lucide-react'
+import usePageMeta from '../hooks/usePageMeta'
 
 const LandingPage = () => {
   const { user, isLoading, logout } = useAuth()
@@ -13,6 +14,11 @@ const LandingPage = () => {
       navigate('/dashboard')
     }
   }, [user, isLoading, navigate])
+  usePageMeta({
+    title: 'Learnova — AI Q&A, Summaries & Flashcards',
+    description: 'Transform text into interactive learning materials: instant summaries, smart flashcards, and AI Q&A.',
+    url: window.location.origin + '/',
+  })
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 to-white">
       {/* Navigation */}

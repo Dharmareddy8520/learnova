@@ -82,6 +82,13 @@ export default function Dashboard() {
     })();
   }, []);
 
+  // SEO meta for Dashboard
+  useEffect(() => {
+    document.title = 'Dashboard — Learnova'
+    const desc = document.querySelector('meta[name="description"]') as HTMLMetaElement | null
+    if (desc) desc.content = 'Your Learnova dashboard: progress, streaks, and quick AI tools for learning.'
+  }, [])
+
   const consecutiveDays = data?.progressData?.consecutiveDays ?? 0;
   const documents = data?.progressData?.documentsCount ?? 0;
   const flashcards = data?.progressData?.flashcardsStudied ?? 0;
