@@ -8,6 +8,7 @@ import {
   generateQuiz as hfGenerateQuiz,
   generateFlashcards as hfGenerateFlashcards,
 } from '../services/hf'
+import { generateAnswer } from '../services/hf'
 import { User } from '../models/User'
 
 dotenv.config()
@@ -178,13 +179,30 @@ router.post('/qa', async (req: Request, res: Response) => {
       inputs: { question, context },
     })
 
+    // If extractive model returned a very short span or low confidence, run a generative fallback
+    let finalAnswer = result?.answer ?? ''
+    let finalScore = result?.score ?? null
+    const lowConfidence = (typeof finalScore === 'number' && finalScore < 0.35)
+    const shortAnswer = typeof finalAnswer === 'string' && finalAnswer.trim().length < 30
+    if (lowConfidence || shortAnswer) {
+      try {
+        const gen = await generateAnswer(question, context)
+        if (gen && gen.trim().length > 0) {
+          finalAnswer = gen
+          finalScore = null // generative answer doesn't have extractive score
+        }
+      } catch (e) {
+        console.debug('Generative QA fallback failed:', (e as any)?.message || e)
+      }
+    }
+
     // increment usage for logged-in users
     if (user && typeof user.incrementUsage === 'function') {
       try {
         const r = await user.incrementUsage(feature)
         return res.json({
-          answer: result?.answer ?? '',
-          score: result?.score ?? null,
+          answer: finalAnswer,
+          score: finalScore,
           start: result?.start ?? null,
           end: result?.end ?? null,
           usage: { feature, used: r.used, limit: getLimitForRole(user.role) }
@@ -195,8 +213,8 @@ router.post('/qa', async (req: Request, res: Response) => {
     }
 
     return res.json({
-      answer: result?.answer ?? '',
-      score: result?.score ?? null,
+      answer: finalAnswer,
+      score: finalScore,
       start: result?.start ?? null,
       end: result?.end ?? null,
     })

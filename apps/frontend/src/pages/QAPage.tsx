@@ -87,11 +87,13 @@ export default function QAPage() {
     }
   };
 
-  const copyAnswer = async () => {
-    if (!last?.answer) return;
-    await navigator.clipboard.writeText(last.answer);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1200);
+  const copyText = async (text?: string) => {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    } catch (e) {}
   };
 
   return (
@@ -174,37 +176,66 @@ export default function QAPage() {
             </div>
 
             <div className={ui.card}>
-              <h2 className="text-lg font-semibold text-gray-900 mb-2">Answer</h2>
-              {!last ? (
-                <p className="text-gray-500 italic">
-                  Your answer will appear here after you provide context and ask a question.
-                </p>
-              ) : (
-                <div className="space-y-4">
-                  <div className="rounded-lg ring-1 ring-gray-200 bg-gray-50 p-3">
-                    <div className="text-sm text-gray-600">Answer</div>
-                    <div className="mt-1 font-medium text-gray-900">{last.answer || "—"}</div>
-                    {typeof last.score === "number" && (
-                      <div className="mt-1 text-xs text-gray-500">Confidence: {confidence}</div>
-                    )}
-                    <button
-                      type="button"
-                      onClick={copyAnswer}
-                      className="mt-2 inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm ring-1 ring-gray-300 hover:bg-gray-50"
-                    >
-                      {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                      {copied ? "Copied" : "Copy Answer"}
-                    </button>
-                  </div>
+              <h2 className="text-lg font-semibold text-gray-900 mb-2">Conversation</h2>
 
-                  <div className="rounded-lg ring-1 ring-gray-200 bg-gray-50 p-3">
-                    <div className="text-sm text-gray-600">Context (highlighted)</div>
-                    <div className="mt-1 text-gray-900">
-                      {renderHighlighted(context, last.start ?? undefined, last.end ?? undefined)}
-                    </div>
-                  </div>
+              {/* Chat area */}
+              <div className="flex flex-col gap-4 mb-4 max-h-[56vh] overflow-y-auto p-2">
+                {history.length === 0 ? (
+                  <div className="text-gray-500 italic">Your answer will appear here after you provide context and ask a question.</div>
+                ) : (
+                  history
+                    .slice()
+                    .reverse()
+                    .map((h, i) => (
+                      <div key={i} className="space-y-2">
+                        <div className="flex justify-end">
+                          <div className="bg-indigo-600 text-white px-4 py-2 rounded-xl max-w-[80%]">{h.question}</div>
+                        </div>
+                        <div className="flex justify-start">
+                          <div className="bg-gray-100 text-gray-900 px-4 py-2 rounded-xl max-w-[80%]">
+                            <div className="prose">
+                              {h.answer ? (
+                                h.answer.split(/\n+/).map((para, pi) => (
+                                  <p key={pi} className="whitespace-pre-wrap">{para}</p>
+                                ))
+                              ) : (
+                                "—"
+                              )}
+                            </div>
+                            <div className="mt-2 flex items-center gap-2">
+                              {/* Badge: Generated vs Extracted */}
+                              {h.score == null ? (
+                                <div className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">Generated</div>
+                              ) : (
+                                <div className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded">Extracted • {(Number(h.score) * 100).toFixed(1)}%</div>
+                              )}
+                              <button type="button" onClick={() => copyText(h.answer)} className="inline-flex items-center gap-2 rounded px-2 py-1 text-xs ring-1 ring-gray-300 hover:bg-gray-50">
+                                {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />} Copy
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                )}
+              </div>
+
+              {/* Chat input for follow-ups */}
+              <form onSubmit={ask} className="mt-2">
+                <label className="sr-only">Ask a follow-up question</label>
+                <div className="flex gap-2">
+                  <input
+                    className="flex-1 border rounded px-3 py-2"
+                    placeholder="Ask a follow-up question about the context..."
+                    value={question}
+                    onChange={(e) => setQuestion(e.target.value)}
+                    disabled={loading}
+                  />
+                  <button type="submit" disabled={!context.trim() || !question.trim() || loading} className={`${ui.btn} ${ui.primary} px-4 py-2 disabled:opacity-60`}>
+                    {loading ? "Answering…" : "Ask"}
+                  </button>
                 </div>
-              )}
+              </form>
             </div>
           </div>
 

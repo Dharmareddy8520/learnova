@@ -119,6 +119,33 @@ export async function summarizeText(text: string) {
   return summary
 }
 
+export async function generateAnswer(question: string, context: string) {
+  const clean = redactSensitive(context)
+  const prompt = `You are an expert assistant. Read the following context and answer the question in a clear, helpful way. If the answer can be supported by a short quote from the context, include a brief quoted excerpt and indicate where it appears. Provide the answer in multiple short paragraphs if needed.
+
+Context:\n"""${clean}"""
+Question: ${question}
+
+Answer:`
+
+  // Prefer Gemini if available for richer prose
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      const out = await generateWithGemini('gemini-2.5-flash', prompt)
+      return parseModelOutput(out)
+    } catch (err: any) {
+      console.warn('Gemini generative fallback failed', err?.message || err)
+    }
+  }
+
+  // HF inference fallback: try instruct models
+  const configured = process.env.HF_INSTRUCT_MODEL || process.env.HF_MODEL
+  const defaults = [configured, 'google/flan-t5-large', 'bigscience/bloom', 'facebook/opt-1.3b'].filter(Boolean) as string[]
+  const payload = { inputs: prompt, parameters: { max_new_tokens: 500, temperature: 0.2 } }
+  const { out } = await tryModels(defaults, payload)
+  return parseModelOutput(out)
+}
+
 async function coerceJson(model: string, rawText: string) {
   // Ask the model to return valid JSON only
   const prompt = `Convert the following model output into valid JSON. Output ONLY valid JSON.\n\n${rawText}`
