@@ -70,18 +70,24 @@ export function useUsageLimits() {
       return 0
     }
 
-    // guest: prefer server-side usedToday if available (we don't have per-feature breakdown for guests),
-    // otherwise fall back to localStorage per-feature counters.
+    // guest: prefer localStorage per-feature counters when available and current
+    // because server-side guest logging may be asynchronous. Fall back to serverUsage
+    // total when local data is missing.
     try {
+      const raw = localStorage.getItem('usage')
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (parsed.date === todayStr()) {
+          return Number((parsed.counts && parsed.counts[feature]) || 0)
+        }
+      }
+
       if (serverUsage && serverUsage.role === 'guest') {
         // return total usedToday as a fallback for any feature display
         return Number(serverUsage.usedToday || 0)
       }
-      const raw = localStorage.getItem('usage')
-      if (!raw) return 0
-      const parsed = JSON.parse(raw)
-      if (parsed.date !== todayStr()) return 0
-      return Number((parsed.counts && parsed.counts[feature]) || 0)
+
+      return 0
     } catch (e) {
       return 0
     }
@@ -131,6 +137,11 @@ export function useUsageLimits() {
           // ignore logging failures
         }
       // also refresh server-side guest count logging may have been recorded
+      // dispatch an immediate local update so other components reflect the new guest count
+      try {
+        window.dispatchEvent(new CustomEvent('usage:updated', { detail: { role: 'guest', usedToday: parsed.counts[feature], limit: guestLimit } }))
+      } catch (e) {}
+      // refresh server-side guest count logging may have been recorded (best-effort)
       fetchServerUsage().catch(() => {})
       return { used: parsed.counts[feature], limit: guestLimit }
     } catch (e) {

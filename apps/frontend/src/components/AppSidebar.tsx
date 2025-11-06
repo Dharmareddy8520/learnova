@@ -93,7 +93,7 @@ export default function Sidebar() {
         aria-modal="true"
       >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">Study Buddy AI</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Learnova</h2>
           <button
             aria-label="Close menu"
             onClick={() => setOpen(false)}

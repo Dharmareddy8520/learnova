@@ -136,10 +136,32 @@ export async function summarizeText(text: string) {
 
   const usedPrompt = isSummarizationModel ? undefined : instructionPrompt
 
-  const out = await hfRequest(model, payload).catch(async (e) => {
-    console.warn('Primary summary model failed, retrying with fallback', e.message)
-    return hfRequest(fallback, payload)
-  })
+  // Try primary HF model, then HF fallback; if both fail, prefer Gemini (if configured)
+  let out: any
+  try {
+    out = await hfRequest(model, payload)
+  } catch (errPrimary: any) {
+    console.warn('Primary summary model failed, retrying with fallback', errPrimary?.message || errPrimary)
+    try {
+      out = await hfRequest(fallback, payload)
+    } catch (errFallback: any) {
+      console.warn('HF fallback also failed for summarization', errFallback?.message || errFallback)
+      // As a last resort, use Gemini generative model if available
+      if (process.env.GEMINI_API_KEY) {
+        try {
+          const gemOut = await generateWithGemini('gemini-2.5-flash', instructionPrompt)
+          let summary = parseModelOutput(gemOut)
+          summary = stripEchoedPrompt(summary, usedPrompt)
+          return summary
+        } catch (gErr: any) {
+          console.warn('Gemini summary fallback failed', gErr?.message || gErr)
+          throw gErr
+        }
+      }
+      // No Gemini configured or Gemini failed: rethrow fallback error
+      throw errFallback
+    }
+  }
 
   let summary = parseModelOutput(out)
   summary = stripEchoedPrompt(summary, usedPrompt)

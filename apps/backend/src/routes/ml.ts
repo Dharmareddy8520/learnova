@@ -118,15 +118,24 @@ router.post('/summarize', async (req: Request, res: Response) => {
     if (!text || !text.trim()) {
       return res.status(400).json({ error: 'Missing text input' })
     }
-    // If logged-in, enforce user's limit server-side
+    // If logged-in, enforce user's limit server-side. Re-load the user doc to get
+    // authoritative, up-to-date usage counts (avoid relying on possibly stale req.user).
     const feature = 'summarize'
-    const user: any = (req as any).user
-    if (user) {
-      const limit = getLimitForRole(user.role)
-      if (limit >= 0) {
-        const used = getUsedForUser(user, feature)
-        if (used >= limit) {
-          return res.status(403).json({ error: 'Usage limit reached', usage: { feature, used, limit } })
+    const sessionUser: any = (req as any).user
+    let freshUser: any = null
+    if (sessionUser) {
+      try {
+        freshUser = await User.findById(sessionUser._id)
+      } catch (e) {
+        freshUser = null
+      }
+      if (freshUser) {
+        const limit = getLimitForRole(freshUser.role)
+        if (limit >= 0) {
+          const used = getUsedForUser(freshUser, feature)
+          if (used >= limit) {
+            return res.status(403).json({ error: 'Usage limit reached', usage: { feature, used, limit } })
+          }
         }
       }
     }
@@ -134,10 +143,10 @@ router.post('/summarize', async (req: Request, res: Response) => {
     const summary = await summarizeText(text)
 
     // increment usage for logged-in users
-    if (user && typeof user.incrementUsage === 'function') {
+    if (freshUser && typeof freshUser.incrementUsage === 'function') {
       try {
-        const r = await user.incrementUsage(feature)
-        return res.json({ summary, usage: { feature, used: r.used, limit: getLimitForRole(user.role) } })
+        const r = await freshUser.incrementUsage(feature)
+        return res.json({ summary, usage: { feature, used: r.used, limit: getLimitForRole(freshUser.role) } })
       } catch (e) {
         console.debug('Failed to increment usage after summarize:', e)
       }
@@ -162,13 +171,21 @@ router.post('/qa', async (req: Request, res: Response) => {
     }
 
     const feature = 'qa'
-    const user: any = (req as any).user
-    if (user) {
-      const limit = getLimitForRole(user.role)
-      if (limit >= 0) {
-        const used = getUsedForUser(user, feature)
-        if (used >= limit) {
-          return res.status(403).json({ error: 'Usage limit reached', usage: { feature, used, limit } })
+    const sessionUser: any = (req as any).user
+    let freshUser: any = null
+    if (sessionUser) {
+      try {
+        freshUser = await User.findById(sessionUser._id)
+      } catch (e) {
+        freshUser = null
+      }
+      if (freshUser) {
+        const limit = getLimitForRole(freshUser.role)
+        if (limit >= 0) {
+          const used = getUsedForUser(freshUser, feature)
+          if (used >= limit) {
+            return res.status(403).json({ error: 'Usage limit reached', usage: { feature, used, limit } })
+          }
         }
       }
     }
@@ -203,15 +220,15 @@ router.post('/qa', async (req: Request, res: Response) => {
     }
 
     // increment usage for logged-in users
-    if (user && typeof user.incrementUsage === 'function') {
+    if (freshUser && typeof freshUser.incrementUsage === 'function') {
       try {
-        const r = await user.incrementUsage(feature)
+        const r = await freshUser.incrementUsage(feature)
         return res.json({
           answer: finalAnswer,
           score: finalScore,
           start: finalStart,
           end: finalEnd,
-          usage: { feature, used: r.used, limit: getLimitForRole(user.role) }
+          usage: { feature, used: r.used, limit: getLimitForRole(freshUser.role) }
         })
       } catch (e) {
         console.debug('Failed to increment usage after qa:', e)
@@ -387,17 +404,32 @@ Generate exactly ${n} flashcards in the same format.
 
 Flashcards:`
 
+    // Usage enforcement (logged-in users) — reload user for authoritative counts
+    const sessionUserFC: any = (req as any).user
+    let freshUserFC: any = null
+    if (sessionUserFC) {
+      try { freshUserFC = await User.findById(sessionUserFC._id) } catch (e) { freshUserFC = null }
+      if (freshUserFC) {
+        const limit = getLimitForRole(freshUserFC.role)
+        if (limit >= 0) {
+          const used = getUsedForUser(freshUserFC, 'flashcards')
+          if (used >= limit) {
+            return res.status(403).json({ error: 'Usage limit reached', usage: { feature: 'flashcards', used, limit } })
+          }
+        }
+      }
+    }
+
     // Try Gemini first and coerce to structured JSON
     if (process.env.GEMINI_API_KEY) {
       const modelId = process.env.GEMINI_MODEL_ID || 'gemini-2.5-flash'
       const out = await generateWithGemini(modelId, prompt)
       try {
         const parsed = JSON.parse(out)
-        const user: any = (req as any).user
-        if (user && typeof user.incrementUsage === 'function') {
+        if (freshUserFC && typeof freshUserFC.incrementUsage === 'function') {
           try {
-            const r = await user.incrementUsage('flashcards')
-            return res.json({ model: modelId, flashcards: parsed, usage: { feature: 'flashcards', used: r.used, limit: getLimitForRole(user.role) } })
+            const r = await freshUserFC.incrementUsage('flashcards')
+            return res.json({ model: modelId, flashcards: parsed, usage: { feature: 'flashcards', used: r.used, limit: getLimitForRole(freshUserFC.role) } })
           } catch (e) {
             console.debug('Failed to increment usage after flashcards (gemini json):', e)
           }
@@ -407,11 +439,10 @@ Flashcards:`
 
       const parsedCards = parseFlashcardFormat(out)
       if (parsedCards) {
-        const user: any = (req as any).user
-        if (user && typeof user.incrementUsage === 'function') {
+        if (freshUserFC && typeof freshUserFC.incrementUsage === 'function') {
           try {
-            const r = await user.incrementUsage('flashcards')
-            return res.json({ model: modelId, flashcards: parsedCards, usage: { feature: 'flashcards', used: r.used, limit: getLimitForRole(user.role) } })
+            const r = await freshUserFC.incrementUsage('flashcards')
+            return res.json({ model: modelId, flashcards: parsedCards, usage: { feature: 'flashcards', used: r.used, limit: getLimitForRole(freshUserFC.role) } })
           } catch (e) {
             console.debug('Failed to increment usage after flashcards (gemini parsed):', e)
           }
@@ -419,11 +450,10 @@ Flashcards:`
         return res.json({ model: modelId, flashcards: parsedCards })
       }
 
-      const user: any = (req as any).user
-      if (user && typeof user.incrementUsage === 'function') {
+      if (freshUserFC && typeof freshUserFC.incrementUsage === 'function') {
         try {
-          const r = await user.incrementUsage('flashcards')
-          return res.json({ model: modelId, flashcards: out, usage: { feature: 'flashcards', used: r.used, limit: getLimitForRole(user.role) } })
+          const r = await freshUserFC.incrementUsage('flashcards')
+          return res.json({ model: modelId, flashcards: out, usage: { feature: 'flashcards', used: r.used, limit: getLimitForRole(freshUserFC.role) } })
         } catch (e) {
           console.debug('Failed to increment usage after flashcards (gemini raw):', e)
         }
@@ -433,11 +463,10 @@ Flashcards:`
 
     // HF fallback
     const hfOut = await hfGenerateFlashcards(text, n)
-    const user2: any = (req as any).user
-    if (user2 && typeof user2.incrementUsage === 'function') {
+    if (freshUserFC && typeof freshUserFC.incrementUsage === 'function') {
       try {
-        const r = await user2.incrementUsage('flashcards')
-        return res.json({ model: 'hf-fallback', flashcards: hfOut, usage: { feature: 'flashcards', used: r.used, limit: getLimitForRole(user2.role) } })
+        const r = await freshUserFC.incrementUsage('flashcards')
+        return res.json({ model: 'hf-fallback', flashcards: hfOut, usage: { feature: 'flashcards', used: r.used, limit: getLimitForRole(freshUserFC.role) } })
       } catch (e) {
         console.debug('Failed to increment usage after flashcards (hf):', e)
       }
