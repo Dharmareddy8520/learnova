@@ -149,7 +149,7 @@ export default function Sidebar() {
       {/* === DESKTOP FIXED SIDEBAR === */}
       <aside className="hidden md:flex md:flex-col fixed left-0 top-0 h-screen w-64 border-r border-gray-200 bg-white">
         <div className="px-6 py-5">
-          <h2 className="text-lg font-semibold text-gray-900">Study Buddy AI</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Learnova</h2>
         </div>
 
         <nav className="mt-2 space-y-1 px-2 overflow-y-auto">

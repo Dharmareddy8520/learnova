@@ -1,5 +1,6 @@
 // src/pages/ProfilePage.tsx
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import axios from 'axios'
 import { useAuth } from '../contexts/AuthContext'
 import {
@@ -88,6 +89,8 @@ const ProfilePage: React.FC = () => {
   const [portalHelp, setPortalHelp] = useState<string | null>(null)
   const [billingInfo, setBillingInfo] = useState<any>(null)
   const [showBillingModal, setShowBillingModal] = useState(false)
+  const location = useLocation()
+  const [syncedAfterBilling, setSyncedAfterBilling] = useState(false)
 
   // password fields
   const [pwd, setPwd] = useState({ current: '', next: '', confirm: '' })
@@ -148,6 +151,37 @@ const ProfilePage: React.FC = () => {
     })()
     return () => { mounted = false }
   }, [])
+
+  // If the user was redirected from Stripe checkout with ?billing=success,
+  // attempt an immediate server-side sync so the account reflects the upgrade
+  useEffect(() => {
+    const qs = new URLSearchParams(location.search)
+    if (qs.get('billing') === 'success' && user && !syncedAfterBilling) {
+      ;(async () => {
+        try {
+          const resp = await axios.post('/api/billing/sync-subscription')
+          if (resp?.data?.ok) {
+            showToast('success', 'Billing updated — your account should now be Premium.')
+            // refresh profile/billing info
+            try {
+              const me = await axios.get('/api/user/me')
+              const data = me.data?.user || me.data
+              setStatus((s: any) => ({ ...s, user: data }))
+              const b = await axios.get('/api/billing/info')
+              setBillingInfo(b.data)
+            } catch (e) { console.debug('Failed to reload profile after billing sync', e) }
+          } else {
+            showToast('error', 'Billing sync did not find an active subscription. Check Stripe dashboard or try again.')
+          }
+        } catch (e: any) {
+          showToast('error', e?.response?.data?.error || 'Failed to sync billing. Please try again later.')
+        } finally {
+          setSyncedAfterBilling(true)
+        }
+      })()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search, user])
 
   const showToast = (kind: 'success' | 'error', msg: string) => {
     setToast({ kind, msg })

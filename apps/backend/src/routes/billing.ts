@@ -346,3 +346,62 @@ export async function stripeWebhookHandler(req: any, res: Response) {
 }
 
 export default router
+
+// POST /api/billing/sync-subscription
+// Authenticated endpoint to force-sync the current user's Stripe subscription
+// Useful when the checkout redirect completed but webhooks were not delivered.
+router.post('/sync-subscription', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const user: any = (req as any).user
+    if (!user) return res.status(401).json({ error: 'Not authenticated' })
+    if (!user.stripeCustomerId && !user.stripeSubscriptionId) return res.status(400).json({ error: 'No Stripe customer or subscription associated with user' })
+
+    // Prefer using stored subscription id if present
+    let subscription: Stripe.Subscription | null = null
+    try {
+      if (user.stripeSubscriptionId) {
+        subscription = await stripe.subscriptions.retrieve(user.stripeSubscriptionId)
+      } else if (user.stripeCustomerId) {
+        const subs = await stripe.subscriptions.list({ customer: user.stripeCustomerId, limit: 1 })
+        if (subs && subs.data && subs.data.length) subscription = subs.data[0]
+      }
+    } catch (e) {
+      console.debug('sync-subscription: failed to retrieve subscription from Stripe', e)
+    }
+
+    // Update local user record based on subscription info
+    try {
+      const u: any = await User.findById(user._id)
+      if (!u) return res.status(404).json({ error: 'User not found' })
+
+      if (subscription) {
+        const status = subscription.status
+        u.stripeSubscriptionId = subscription.id
+        u.subscriptionStatus = status
+        u.currentPeriodEnd = subscription.current_period_end ? new Date(subscription.current_period_end * 1000) : null
+        if (status === 'active' || status === 'trialing') {
+          u.role = 'premium'
+        } else if (status === 'canceled' || status === 'incomplete' || status === 'incomplete_expired' || status === 'past_due') {
+          // don't forcibly downgrade if still within period_end; but set subscriptionStatus
+          u.role = u.role === 'premium' && u.currentPeriodEnd && u.currentPeriodEnd > new Date() ? 'premium' : 'free'
+        }
+        await u.save()
+        return res.json({ ok: true, subscription: { id: subscription.id, status: subscription.status, currentPeriodEnd: u.currentPeriodEnd }, role: u.role })
+      }
+
+      // If no subscription found on Stripe, try to clear local subscription fields
+      u.stripeSubscriptionId = ''
+      u.subscriptionStatus = 'inactive'
+      u.currentPeriodEnd = null
+      if (u.role === 'premium') u.role = 'free'
+      await u.save()
+      return res.json({ ok: true, message: 'No active subscription found; user downgraded to free', role: u.role })
+    } catch (e: any) {
+      console.error('sync-subscription failed:', e)
+      return res.status(500).json({ error: e?.message || 'Failed to sync subscription' })
+    }
+  } catch (e: any) {
+    console.error('sync-subscription top-level error:', e)
+    return res.status(500).json({ error: e?.message || 'Failed to sync subscription' })
+  }
+})
