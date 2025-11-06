@@ -1,24 +1,51 @@
 import path from 'path'
 import { generateWithGemini } from './gemini'
 
-const HF_API = 'https://api-inference.huggingface.co/models'
+// Allow overriding base HF API endpoints via env vars. Older deployments used
+// https://api-inference.huggingface.co/models which is being deprecated; the
+// router endpoint is https://router.huggingface.co/hf-inference (recommended).
+const HF_API_BASE = process.env.HF_API_BASE || 'https://api-inference.huggingface.co/models'
+const HF_ROUTER_BASE = process.env.HF_ROUTER_BASE || 'https://router.huggingface.co/hf-inference/models'
 
 async function hfRequest(model: string, payload: any) {
   const token = process.env.HF_API_KEY
   if (!token) throw new Error('HF_API_KEY not configured')
 
-  const res = await fetch(`${HF_API}/${model}`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  })
+  const doFetch = async (base: string) => {
+    const url = `${base}/${model}`
+    return fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    })
+  }
+
+  // First attempt: configured primary base
+  let res = await doFetch(HF_API_BASE).catch(err => { throw err })
+
+  // If HF deprecated the primary API, try the router endpoint (410 or specific error)
+  if (!res.ok) {
+    // read body safely for debugging
+    const body = await res.text().catch(() => '')
+    // If the server returned 410 Gone or an explicit migration message, retry router
+    if (res.status === 410 || /no longer supported|router.huggingface.co/i.test(body)) {
+      try {
+        console.warn(`HF primary endpoint deprecated (status=${res.status}), retrying router endpoint for model=${model}`)
+        res = await doFetch(HF_ROUTER_BASE)
+      } catch (err) {
+        throw new Error(`HF router retry failed for model=${model} - ${String(err)}`)
+      }
+    } else {
+      // Not a migration case: throw with context
+      throw new Error(`HF ${res.status} ${res.statusText} - model=${model} - ${body}`)
+    }
+  }
 
   if (!res.ok) {
     const body = await res.text().catch(() => '')
-    // Include model in the error message to make fallbacks and 404s traceable
     throw new Error(`HF ${res.status} ${res.statusText} - model=${model} - ${body}`)
   }
 
