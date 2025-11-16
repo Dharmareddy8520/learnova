@@ -1,6 +1,9 @@
 import path from 'path'
 import { generateWithGemini } from './gemini'
 
+// Centralize Gemini model selection. Set `GEMINI_MODEL` in env to override.
+const DEFAULT_GEMINI_MODEL = (process.env.GEMINI_MODEL || 'gemini-2.5-pro').trim()
+
 // Allow overriding base HF API endpoints via env vars. Older deployments used
 // https://api-inference.huggingface.co/models which is being deprecated; the
 // router endpoint is https://router.huggingface.co/hf-inference (recommended).
@@ -104,7 +107,7 @@ function parseModelOutput(raw: any): string {
   return String(raw)
 }
 
-export async function summarizeText(text: string) {
+export async function summarizeText(text: string, options?: { forceGemini?: boolean }) {
   const model = process.env.HF_SUMMARY_MODEL || process.env.HF_MODEL || 'facebook/bart-large-cnn'
   const fallback = process.env.HF_SUMMARY_FALLBACK || 'google/flan-t5-large'
   const clean = redactSensitive(text)
@@ -136,6 +139,19 @@ export async function summarizeText(text: string) {
 
   const usedPrompt = isSummarizationModel ? undefined : instructionPrompt
 
+  // If caller requests Gemini preference, try Gemini first
+  if (options?.forceGemini && process.env.GEMINI_API_KEY) {
+    try {
+      const gemOut = await generateWithGemini(DEFAULT_GEMINI_MODEL, instructionPrompt)
+      let summary = parseModelOutput(gemOut)
+      summary = stripEchoedPrompt(summary, usedPrompt)
+      return summary
+    } catch (gErr: any) {
+      console.warn('Gemini preferred but failed for summary', (gErr as any)?.message || String(gErr))
+      // fall through to HF attempts
+    }
+  }
+
   // Try primary HF model, then HF fallback; if both fail, prefer Gemini (if configured)
   let out: any
   try {
@@ -149,12 +165,12 @@ export async function summarizeText(text: string) {
       // As a last resort, use Gemini generative model if available
       if (process.env.GEMINI_API_KEY) {
         try {
-          const gemOut = await generateWithGemini('gemini-2.5-flash', instructionPrompt)
+          const gemOut = await generateWithGemini(DEFAULT_GEMINI_MODEL, instructionPrompt)
           let summary = parseModelOutput(gemOut)
           summary = stripEchoedPrompt(summary, usedPrompt)
           return summary
         } catch (gErr: any) {
-          console.warn('Gemini summary fallback failed', gErr?.message || gErr)
+          console.warn('Gemini summary fallback failed', (gErr as any)?.message || String(gErr))
           throw gErr
         }
       }
@@ -168,7 +184,7 @@ export async function summarizeText(text: string) {
   return summary
 }
 
-export async function generateAnswer(question: string, context: string) {
+export async function generateAnswer(question: string, context: string, options?: { forceGemini?: boolean }) {
   const clean = redactSensitive(context)
   const prompt = `You are an expert assistant. Read the following context and answer the question in a clear, helpful way. If the answer can be supported by a short quote from the context, include a brief quoted excerpt and indicate where it appears. Provide the answer in multiple short paragraphs if needed.
 
@@ -177,13 +193,24 @@ Question: ${question}
 
 Answer:`
 
-  // Prefer Gemini if available for richer prose
-  if (process.env.GEMINI_API_KEY) {
+  // Default behavior: allow Gemini fallback. If caller passes options.forceGemini, prefer Gemini first.
+  // We'll accept an options object as a third parameter when calling this function.
+  const callerOptions = options
+  if (callerOptions?.forceGemini && process.env.GEMINI_API_KEY) {
     try {
-      const out = await generateWithGemini('gemini-2.5-flash', prompt)
+      const out = await generateWithGemini(DEFAULT_GEMINI_MODEL, prompt)
       return parseModelOutput(out)
     } catch (err: any) {
-      console.warn('Gemini generative fallback failed', err?.message || err)
+      console.warn('Gemini preferred but failed for generateAnswer', (err as any)?.message || String(err))
+    }
+  }
+
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      const out = await generateWithGemini(DEFAULT_GEMINI_MODEL, prompt)
+      return parseModelOutput(out)
+    } catch (err: any) {
+      console.warn('Gemini generative fallback failed', (err as any)?.message || String(err))
     }
   }
 
@@ -203,31 +230,45 @@ async function coerceJson(model: string, rawText: string) {
   return parseModelOutput(out)
 }
 
-export async function generateQuiz(text: string, count = 5) {
+export async function generateQuiz(text: string, count = 5, options?: { forceGemini?: boolean }) {
   const configured = process.env.HF_INSTRUCT_MODEL || process.env.HF_MODEL
   // Use HF models that are generally available on the inference API; avoid models that commonly 404.
-  const defaults = [configured, 'google/flan-t5-large', 'sshleifer/distilbart-cnn-12-6', 'facebook/bart-large-cnn']
+  // Prefer robust instruction models; avoid facebook/bart-large-cnn which caused token errors
+  // Prefer a robust instruction model first to avoid tokenization/index errors seen
+  // with some CNN/BART models when fed long/chunked inputs.
+  const defaults = ['google/flan-t5-large', configured, 'sshleifer/distilbart-cnn-12-6', 'sshleifer/distilbart-cnn-6-6']
   const models = defaults.filter(Boolean) as string[]
     const clean = redactSensitive(text);
     const prompt = `You are an intelligent quiz generator.\n\nAnalyze the following text and generate ${count} multiple-choice questions (MCQs).\nEach question should test the user's understanding of the text, not memorization.\nReturn the output in pure JSON format.\n\nRules:\n- Each question must have exactly 4 options.\n- Include the correct answer text in \"answer\".\n- Do NOT include explanations.\n\nText:\n\"\"\"${clean}\"\"\"\nFormat:\n[\n  {\n    \"question\": \"...\",\n    \"options\": [\"A\", \"B\", \"C\", \"D\"],\n    \"answer\": \"...\"\n  }\n]\n`;
 
-    if (!process.env.GEMINI_API_KEY) {
-      throw new Error('GEMINI_API_KEY not configured');
-    }
-    try {
-    const geminiOut = await generateWithGemini('gemini-pro', prompt);
+    // If caller requests Gemini preference, try Gemini first
+    if (options?.forceGemini && process.env.GEMINI_API_KEY) {
       try {
-        return JSON.parse(geminiOut);
-      } catch {
-        return geminiOut;
+        const gemOut = await generateWithGemini(DEFAULT_GEMINI_MODEL, prompt)
+        try { return JSON.parse(gemOut) } catch { return gemOut }
+      } catch (gErr: any) {
+        console.warn('Gemini preferred but failed for quiz', (gErr as any)?.message || String(gErr))
+        // fall through to HF attempts below
       }
-    } catch (gErr: any) {
-      console.warn('Gemini quiz generation failed', gErr?.message || gErr);
-      throw new Error('Quiz generation failed with Gemini');
     }
+
+    if (process.env.GEMINI_API_KEY) {
+      try {
+        const geminiOut = await generateWithGemini(DEFAULT_GEMINI_MODEL, prompt)
+        try { return JSON.parse(geminiOut) } catch { return geminiOut }
+      } catch (gErr: any) {
+        console.warn('Gemini quiz generation failed', (gErr as any)?.message || String(gErr))
+        // fall through to HF attempt
+      }
+    }
+
+    // HF fallback path: try HF models
+    const { out } = await tryModels(models, { inputs: prompt, parameters: { max_new_tokens: 700, temperature: 0.0 } })
+    const parsed = parseModelOutput(out)
+    try { return JSON.parse(parsed) } catch { return parsed }
 }
 
-export async function generateFlashcards(text: string, count = 10) {
+export async function generateFlashcards(text: string, count = 10, options?: { forceGemini?: boolean }) {
   const configuredF = process.env.HF_INSTRUCT_MODEL || process.env.HF_MODEL
   const defaultsF = [configuredF, 'google/flan-t5-large', 'sshleifer/distilbart-cnn-12-6', 'facebook/bart-large-cnn']
   const modelsF = defaultsF.filter(Boolean) as string[]
@@ -236,6 +277,36 @@ export async function generateFlashcards(text: string, count = 10) {
 
   const prompt = `${exampleF}\n\n[START OF TASK]\nContext: ${clean}\n\nGenerate exactly ${count} flashcards in the same format.\n\nFlashcards:`
   const payload = { inputs: prompt, parameters: { max_new_tokens: 700, temperature: 0.0 } }
+
+  // If caller requested Gemini preference, try it first
+  if (options?.forceGemini && process.env.GEMINI_API_KEY) {
+    try {
+      const geminiOut = await generateWithGemini(process.env.GEMINI_MODEL || 'gemini-1.5-flash', prompt)
+      try { return JSON.parse(geminiOut) } catch {}
+      // if not JSON, try parsing front/back format
+      const parsedFromGem = ((): any => {
+        const lines = geminiOut.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean)
+        const items: any[] = []
+        let i = 0
+        while (i < lines.length) {
+          if (/^Flashcard\s*\d+/i.test(lines[i])) { i++ }
+          if (i < lines.length && /^Front:/i.test(lines[i])) {
+            const front = lines[i].replace(/^Front:\s*/i, '').trim(); i++
+            let back = ''
+            if (i < lines.length && /^Back:/i.test(lines[i])) { back = lines[i].replace(/^Back:\s*/i, '').trim(); i++ }
+            if (front) items.push({ question: front, answer: back })
+            continue
+          }
+          i++
+        }
+        return items.length ? items : null
+      })()
+      if (parsedFromGem) return parsedFromGem
+    } catch (gErr: any) {
+      console.warn('Gemini preferred but failed for flashcards', gErr?.message || gErr)
+      // continue to HF path
+    }
+  }
 
   const { out: outF, model: modelF } = await tryModels(modelsF, payload)
   const raw = parseModelOutput(outF)

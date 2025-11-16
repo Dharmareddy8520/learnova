@@ -1,170 +1,175 @@
-Implement Stripe subscriptions so users can upgrade to Premium (unlimited). Provide:
+You are implementing Large File → Summary for Learnova. Ship this in small, testable steps. Ignore databases for now—use temp disk + in-memory state only.
 
-Checkout (subscribe),
+Scope (phase 1)
 
-Customer billing portal (manage/cancel),
+Accept big files (TXT, PDF, DOCX/DOC).
 
-Webhooks (activate/deactivate premium),
+Extract text, normalize, chunk + map-reduce summarize.
 
-UI: “Upgrade to Premium” entry points + status badges,
+Use existing hf.ts + gemini.ts (with retries) to generate summary.
 
-Plan-aware usage gates (free 3 / logged-in 5 / premium unlimited).
+Add minimal frontend to upload, kick off analyze, poll, and display the summary.
 
-Deliverables
+No login/roles/quotas yet. No quiz/flashcards/QA yet.
 
-Backend (Node/Express)
+Backend tasks
+1) Endpoints
 
-Add Stripe SDK and types.
+POST /api/upload
 
-Read env vars:
+Accept single file field file (TXT, PDF, DOCX, DOC).
 
-STRIPE_SECRET_KEY=
-STRIPE_WEBHOOK_SECRET=
-STRIPE_PRICE_PREMIUM_MONTHLY=   # price_xxx
-STRIPE_PRICE_PREMIUM_YEARLY=    # (optional)
-APP_BASE_URL=                   # e.g., https://learnova.app
+Max size: 50 MB (configurable).
 
+Save to temp: /tmp/learnova/<jobId>/<originalName>.
 
-Create routes:
+Return { jobId, fileName, mimeType, size }.
 
-POST /api/billing/create-checkout-session
+POST /api/analyze
 
-Requires authenticated user (redirect unauthenticated to login).
+Body: { jobId, tasks: ["summary"] } (ignore other tasks for now).
 
-Creates/looks up Stripe Customer by user.id + user.email (save stripeCustomerId).
+Validate file exists under /tmp/learnova/<jobId>/.
 
-Uses mode: 'subscription', line_items with price: STRIPE_PRICE_PREMIUM_MONTHLY, trial set to 0.
+Start an in-memory job (store in a Map: jobs[jobId] = { status, stages, result, error }).
 
-success_url = ${APP_BASE_URL}/account?billing=success
+Immediately return { jobId, status: "queued" }.
 
-cancel_url = ${APP_BASE_URL}/account?billing=cancel
+Spawn async worker (same process) that:
 
-Return { url } to redirect.
+extracting → extract & normalize text (see below)
 
-POST /api/billing/create-portal-session
+chunking → chunk + overlap
 
-Requires authenticated user with stripeCustomerId.
+map_reduce → summarize chunks → reduce to final 3–5 sentence summary
 
-Create billing portal session, return_url = ${APP_BASE_URL}/account.
+completed → write result to jobs[jobId].result.summary
 
-Return { url }.
+GET /api/analyze/:jobId
 
-POST /api/billing/stripe-webhook (raw body)
+Return { jobId, status, stages, result?, error? }.
 
-Verify with STRIPE_WEBHOOK_SECRET.
+stages is an ordered list: ["extracting","chunking","map_reduce","completed"] with timestamps.
 
-Handle events:
+2) Extraction
 
-checkout.session.completed → set user.role='premium', store stripeCustomerId, subscriptionId, plan='premium', status='active', current_period_end.
+Implement utility extractText(filePath, mimeType):
 
-customer.subscription.updated → update status, current_period_end.
+TXT: UTF-8 read.
 
-customer.subscription.deleted or …canceled → downgrade at period end; set status='canceled' and schedule downgrade job, or immediately revert to role='user' if canceled now.
+PDF: use pdf-parse (or pdfjs-dist)—concatenate pages in order; strip headers/footers if obvious; collapse hyphenated line breaks (some-\nthing → something).
 
-Log + respond 200.
+DOCX/DOC: use mammoth (DOCX); for legacy DOC, attempt officeparser or return “unsupported” if not available.
 
-DB/User model changes (add migration or schema changes):
+Normalize:
 
-role: 'guest'|'user'|'premium' (default 'user' for logged-in accounts).
+Convert CRLF → LF.
 
-stripeCustomerId, stripeSubscriptionId, subscriptionStatus, currentPeriodEnd.
+Collapse >2 line breaks to 2.
 
-Optional: plan: 'free'|'premium'.
+Collapse multiple spaces.
 
-Usage gating middleware (server-side)
+Drop control chars.
 
-Endpoint wrapper to check allowance per day (or rolling) per feature:
+As a final pass, call redactSensitive() from hf.ts.
 
-guest (no auth): 3 total actions/day across quiz/qa/summary/flashcards.
+Edge cases:
 
-user (auth): 5 total/day.
+Empty or near-empty text ⇒ set job to failed with message “No extractable text”.
 
-premium: unlimited.
+Scanned PDF returning no text ⇒ same as above.
 
-Persist counts server-side keyed by IP for guests (fallback), and user.id for logged-in.
+Oversized text (e.g., > 1.5M chars) ⇒ we still proceed to chunking; don’t load everything into model at once.
 
-Expose a meta endpoint GET /api/usage that returns { role, usedToday, limit }.
+3) Chunking + Map-Reduce summary
 
-Frontend (React)
+Config (env or constants):
 
-Add “Upgrade” CTAs:
+CHUNK_SIZE_CHARS=2600
 
-In AppSidebar: a “Upgrade to Premium” button/badge for non-premium users.
+CHUNK_OVERLAP_CHARS=200
 
-In gated UIs (quiz/qa/summary/flashcards): when limit exceeded, show an interstitial with benefits + “Upgrade” button.
+Chunk deterministically across characters; ensure overlap (start next chunk at i += CHUNK_SIZE - OVERLAP).
 
-In /account: show plan card with Current Plan (Free/User/Premium), usage stats, buttons:
+Map step: for each chunk, call summarizeText(chunk, { forceGemini: true }).
 
-“Upgrade to Premium” (calls /api/billing/create-checkout-session then window.location = url)
+If Gemini not configured or fails, hf.ts fallback path will run automatically.
 
-“Manage Billing” (calls /api/billing/create-portal-session then redirect)
+Cap retries via existing logic; log chunk index on error; if one chunk repeatedly fails, skip it and continue.
 
-Add plan indicator:
+Reduce step: join all map summaries with \n and call summarizeText(joined, { forceGemini: true }) to produce a final 3–5 sentence summary.
 
-Small badge next to user in top bar / sidebar: Free (guest), User, Premium.
+Store the final in jobs[jobId].result.summary.
 
-Usage indicator:
+4) Error handling & progress
 
-Fetch /api/usage on page mount; render used/limit chip (e.g., “3/5 today”) unless premium.
+Update jobs[jobId].status per stage; push timestamps into stages.
 
-UX copy (short):
+If any stage throws:
 
-Free (guest): “Try Learnova free — 3 actions/day without login.”
+Set status="failed", error=humanReadableMessage, keep partial data if available.
 
-User (logged-in): “You have 5 actions/day. Upgrade to Premium for unlimited.”
+Always sanitize HF error messages (don’t leak tokens).
 
-Premium: “Unlimited usage active ✨”
+5) Config & limits
 
-Error states: If checkout/portal session fails, show toast with retry.
+Add env with sane defaults (but code should work without them):
 
-Security & Testing
+UPLOAD_MAX_MB=50
 
-Use test mode keys initially.
+CHUNK_SIZE_CHARS=2600
 
-Allow only backend to create Checkout/Portal sessions.
+CHUNK_OVERLAP_CHARS=200
 
-Webhook route must consume raw body (no JSON parser) and verify signature.
+Respect your existing HF/Gemini envs in hf.ts/gemini.ts.
 
-Record Stripe IDs only after verification.
+Frontend tasks
+6) Minimal UI (new page or card on Dashboard)
 
-Add seed/test script to simulate webhook for local testing.
+Create an Upload & Summarize card:
 
-Acceptance Criteria
+Drag-and-drop + “Choose file” (accept .txt,.pdf,.doc,.docx).
 
-Guest (no login): can use any feature up to 3 actions/day, then sees upgrade/login modal. Sidebar shows “Login” + “Upgrade” (upgrade directs to login).
+On choose: POST /api/upload → receive { jobId }.
 
-Logged-in user: limit 5 actions/day; upgrade opens Stripe Checkout; upon success, user becomes premium (webhook-driven) and sees unlimited usage.
+Then POST /api/analyze with { jobId, tasks: ["summary"] }.
 
-Premium: “Manage billing” button opens Stripe Customer Portal; canceling subscription downgrades at period end (or immediately if configured).
+Poll GET /api/analyze/:jobId every 2s:
 
-/account reflects accurate plan and next renewal date.
+Show stage badges (Extracting → Chunking → Summarizing → Completed).
 
-All pages (dashboard, quiz, qa, flashcards, profile) show consistent plan badge and usage bar.
+When result.summary appears, render in a nice panel.
 
-Implementation Notes
+Handle errors gracefully with a friendly message and a “Try again” button.
 
-Backend: create apps/backend/src/routes/billing.ts for the three endpoints; wire in app.ts.
+Mobile/Sidebar spacing: Ensure main content has pt-14 pb-14 md:pt-0 md:pb-0 md:pl-64 if your sidebar is fixed; otherwise keep typical container padding.
 
-Webhook route: app.post('/api/billing/stripe-webhook', express.raw({ type: 'application/json' }), handler).
+Testing checklist (phase 1)
 
-Ensure general JSON middleware does not apply to webhook path.
+✅ TXT: small article (works)
 
-Store usage counters in DB or Redis; for quick start, persist per day in DB table usage_events(userId/IP, feature, createdAt).
+✅ PDF: text-based PDF (works), scanned PDF (graceful “No extractable text”)
 
-Env gating in CI/Render: set Stripe secrets; in dev, use Stripe CLI to forward webhooks: stripe listen --forward-to localhost:3001/api/billing/stripe-webhook.
+✅ DOCX: simple doc (works)
 
-Copy/UX Snippets (for interstitial modal)
+✅ Very long file (e.g., 100+ pages): progress shows multiple stages; final summary returned; no memory blowups
 
-Title: “Unlock Unlimited Learning”
+✅ HF router migration handled automatically (410 → router)
 
-Bullets: “Unlimited Quiz, Q&A, Summaries”, “Priority generation”, “Cancel anytime”
+✅ Gemini retry/backoff hits for occasional 503 and recovers
 
-Buttons: “Upgrade to Premium”, “Maybe later”
+✅ If some chunk fails, job still completes using other chunks (log the failed chunk index)
 
-Post-merge Checklist
+Acceptance criteria
 
-Add products/prices in Stripe Dashboard; set STRIPE_PRICE_PREMIUM_MONTHLY.
+I can upload a big PDF/DOCX/TXT and consistently see a 3–5 sentence final summary within the UI.
 
-Configure webhook endpoint in Stripe → events: checkout.session.completed, customer.subscription.updated, customer.subscription.deleted.
+Progress stages update visibly during the run.
 
-Run migrations; test full flow with test card 4242 4242 4242 4242.
+Empty/scanned PDFs return a clear, friendly error.
+
+No DB required; restarts forget state (fine for phase 1).
+
+Code style matches project (TypeScript, existing utilities, error messages consistent).
+
+Do not implement quiz/flashcards/Q&A or quotas yet. Once summary is stable, I’ll ask you to extend the same flow to other features.

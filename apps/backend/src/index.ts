@@ -17,6 +17,9 @@ import mlRoutes from './routes/ml';
 import logRoutes from './routes/log';
 import billingRoutes, { stripeWebhookHandler } from './routes/billing';
 import usageRoutes from './routes/usage';
+import analyzeRoutes from './routes/analyze';
+import uploadRoutes from './routes/upload';
+import summaryRoutes from './routes/summary';
 import { isAuthenticated } from './middleware/auth';
 
 const app = express();
@@ -122,6 +125,12 @@ app.use('/api/user', isAuthenticated, userRoutes);
 app.use('/api/dashboard', isAuthenticated, dashboardRoutes);
 // Mount ML routes at /api so endpoints are available as /api/summarize, /api/quiz/generate, etc.
 app.use('/api', mlRoutes);
+// In-memory file analyze endpoints (upload + analyze + status)
+app.use('/api', analyzeRoutes);
+// File upload endpoints
+app.use('/api', uploadRoutes);
+// Summary processing endpoints  
+app.use('/api', summaryRoutes);
 // Logging endpoints (public, dev helper)
 app.use('/api/log', logRoutes);
 // Billing routes (checkout + portal)

@@ -11,6 +11,8 @@ import FlashcardsPage from './pages/FlashcardsPage'
 import ProfilePage from './pages/ProfilePage'
 import ProtectedRoute from './components/ProtectedRoute'
 import QAPage from './pages/QAPage'
+import FileSummarizerPage from './pages/FileSummarizerPage'
+import DocumentAnalyzerPage from './pages/DocumentAnalyzerPage'
 
 function App() {
   return (
@@ -24,6 +26,8 @@ function App() {
           <Route path="/tools" element={<MLTools />} />
           <Route path="/quiz-generator" element={<QuizGenerator />} />
           <Route path="/flashcards" element={<FlashcardsPage />} />
+          <Route path="/summarizer" element={<FileSummarizerPage />} />
+          <Route path="/analyzer" element={<DocumentAnalyzerPage />} />
           <Route path="/account" element={<ProfilePage />} />
           <Route path="/qa" element={<QAPage />} />
           <Route 

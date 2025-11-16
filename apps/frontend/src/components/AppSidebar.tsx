@@ -11,6 +11,7 @@ type Item = { label: string; path: string };
 
 const items: Item[] = [
   { label: "Summarization",      path: "/dashboard" },
+  { label: "Document Analyzer",  path: "/analyzer" },
   { label: "Quiz Generation",    path: "/quiz-generator" },
   { label: "Q&A Assistance",     path: "/qa" },
   { label: "Flashcard Creation", path: "/flashcards" },
