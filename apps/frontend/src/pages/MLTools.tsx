@@ -15,6 +15,7 @@ const MLTools: React.FC = () => {
   const [cards, setCards] = useState<any>(null)
   const [quizCount, setQuizCount] = useState<number>(5)
   const [flashCount, setFlashCount] = useState<number>(10)
+  const [summaryWords, setSummaryWords] = useState<number>(200)
 
   usePageMeta({
     title: 'Tools — Summarize, Quiz & Flashcards | Learnova',
@@ -44,7 +45,7 @@ const MLTools: React.FC = () => {
         setSummaryWarning(null)
       }
 
-      const out = await summarize(payloadText)
+  const out = await summarize(payloadText, summaryWords)
       setSummary(out.summary || String(out))
       // increment usage for guests (server will handle logged-in users)
       if (!user) {
@@ -117,6 +118,8 @@ const MLTools: React.FC = () => {
       <div className="flex gap-3 mb-4 items-center">
         <div className="flex items-center gap-2">
           <button onClick={doSummarize} className="btn btn-primary" disabled={loading || !text}>Summarize</button>
+          <label className="text-sm text-gray-600 ml-2">Words</label>
+          <input type="number" value={summaryWords} min={20} max={2000} onChange={(e) => setSummaryWords(Number(e.target.value) || 200)} className="w-20 p-1 border rounded text-sm" />
           <span className="text-sm text-gray-600">{isUnlimited('summarize') ? '∞' : `${getUsed('summarize')}/${getLimit('summarize')} used`}</span>
         </div>
 

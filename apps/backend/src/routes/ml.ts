@@ -111,10 +111,188 @@ function parseFlashcardFormat(rawText: string) {
   return cards.length ? cards : null
 }
 
+// Remove surrounding code fences or backticks before attempting JSON.parse
+function unwrapCodeBlock(s: string | undefined) {
+  if (!s) return ''
+  let out = String(s).trim()
+  // remove ```json or ``` wrappers
+  out = out.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '')
+  // remove single-line backticks
+  out = out.replace(/^`+|`+$/g, '')
+  return out.trim()
+}
+
+// Heuristic extractor: look for numbered Flashcard blocks or Front:/Back: patterns
+function extractFlashcardsHeuristically(rawText: string, n: number) {
+  if (!rawText) return null
+  const cleaned = unwrapCodeBlock(rawText)
+  const blocks: string[] = []
+  // Try to split by 'Flashcard' keywords
+  const byFlashcard = cleaned.split(/\bFlashcard\b/i).map(s => s.trim()).filter(Boolean)
+  if (byFlashcard.length > 0) {
+    for (const b of byFlashcard) {
+      // drop short instruction-like pieces
+      if (/generate\s+exactly\s+\d+/i.test(b)) continue
+      blocks.push(b)
+    }
+  }
+  // If blocks empty, try numbered lists like '1.' '2)'
+  if (blocks.length === 0) {
+    const numbered = cleaned.split(/(?=\n\s*\d+[:\.)])/g).map(s => s.trim()).filter(Boolean)
+    if (numbered.length > 0) blocks.push(...numbered)
+  }
+  // fallback: split on double newlines
+  if (blocks.length === 0) blocks.push(...cleaned.split(/\n{2,}/).map(s => s.trim()).filter(Boolean))
+
+  const cards: any[] = []
+  for (const blk of blocks) {
+    if (cards.length >= n) break
+    // try Front: / Back:
+    const mFront = blk.match(/Front[:\s-]*([^\n\r]+)/i)
+    const mBack = blk.match(/Back[:\s-]*([^\n\r]+)/i)
+    if (mFront) {
+      const front = mFront[1].trim()
+      const back = mBack ? mBack[1].trim() : blk.replace(mFront[0], '').trim()
+      cards.push({ front: front + (front.endsWith('.') ? '' : '...'), back })
+      continue
+    }
+    // try Q:/A: pairs
+    const lines = blk.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+    if (lines.length >= 2) {
+      const front = lines[0].replace(/^Q[:\s-]*/i, '').replace(/^\d+[:\.)]/, '').trim()
+      const back = lines[1].replace(/^A[:\s-]*/i, '').trim()
+      if (front) { cards.push({ front: front + (front.endsWith('.') ? '' : '...'), back }); continue }
+    }
+    // last resort: use first sentence as front
+    const firstLine = blk.split(/[\.\!\?]/)[0]
+    if (firstLine && firstLine.trim().length > 5) {
+      cards.push({ front: firstLine.trim() + '...', back: blk.trim() })
+      continue
+    }
+  }
+  return cards.length ? cards.slice(0, n) : null
+}
+
+// --- Local lightweight fallback generators ---
+function splitSentences(text: string) {
+  return text
+    .replace(/\r\n/g, '\n')
+    .split(/(?<=[.!?])\s+/)
+    .map(s => s.trim())
+    .filter(Boolean)
+}
+
+function generateFlashcardsLocal(text: string, n: number) {
+  const sents = splitSentences(text)
+  // score sentences by length and presence of keywords
+  const scored = sents.map(s => ({ s, score: Math.min(1, s.length / 200) + (/\b(is|are|was|has|have|include|includes|consists)\b/i.test(s) ? 0.5 : 0) }))
+    .sort((a, b) => b.score - a.score)
+  const cards: string[] = []
+  for (const item of scored) {
+    if (cards.length >= n) break
+    const sentence = item.s
+    const front = sentence.split(/[,;:\-]/)[0].split(' ').slice(0, 10).join(' ').trim()
+    if (front) cards.push(front + (front.endsWith('.') ? '' : '...'))
+  }
+  // fallback: if not enough, push shorter fragments
+  let i = 0
+  while (cards.length < n && i < sents.length) {
+    const sentence = sents[i++]
+    const front = sentence.split(' ').slice(0, 8).join(' ')
+    cards.push(front + '...')
+  }
+  return cards.slice(0, n)
+}
+// Normalize arbitrary parsed flashcard structures into an array of plain strings (important points)
+function normalizeFlashcardItems(raw: any, n: number): string[] {
+  const out: string[] = []
+  if (!raw) return out
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      if (typeof item === 'string') {
+        const first = item.split(/[\.\!\?\n]/)[0].trim()
+        if (first) out.push(first)
+      } else if (item && typeof item === 'object') {
+        const front = (item.front || item.question || item.prompt || item.text || item.title || item.answer || '').toString().trim()
+        if (front) out.push(front)
+      }
+      if (out.length >= n) break
+    }
+  } else if (typeof raw === 'string') {
+    const cleaned = unwrapCodeBlock(raw)
+    const blocks = cleaned.split(/\n{1,2}/).map(s => s.trim()).filter(Boolean)
+    for (const b of blocks) {
+      if (/^Front[:\s]/i.test(b)) {
+        const f = b.replace(/^Front[:\s]+/i, '').split(/\n/)[0].trim()
+        if (f) out.push(f)
+      } else {
+        const first = b.split(/[\.\!\?\n]/)[0].trim()
+        if (first) out.push(first)
+      }
+      if (out.length >= n) break
+    }
+  }
+  // If still not enough, generate locally
+  if (out.length < n) {
+    const local = generateFlashcardsLocal(typeof raw === 'string' ? raw : (raw && raw.text) || '', n)
+    for (const l of local) {
+      if (out.length >= n) break
+      out.push(l)
+    }
+  }
+  return out.slice(0, n)
+}
+
+function generateQuizLocal(text: string, n: number) {
+  const sents = splitSentences(text)
+  const facts: string[] = []
+  const answers: string[] = []
+  for (const s of sents) {
+    const m = s.match(/^(.*?)\b(is|are|was|has|have|includes|consists of)\b\s*(.*?)(?:[.,;!?]|$)/i)
+    if (m) {
+      const subject = m[1].trim()
+      const answer = m[3].trim()
+      if (subject && answer && answer.length < 200) {
+        facts.push(s)
+        answers.push(answer)
+      }
+    }
+    if (facts.length >= n * 2) break
+  }
+
+  const questions: any[] = []
+  for (let i = 0; i < Math.min(n, facts.length); i++) {
+    const subjectMatch = facts[i].match(/^(.*?)\b(is|are|was|has|have|includes|consists of)\b/i)
+    const subject = subjectMatch ? subjectMatch[1].replace(/^The\s+/i, '').trim() : 'It'
+    const correct = answers[i]
+    // pick distractors from other answers
+    const pool = answers.filter((_, idx) => idx !== i)
+    const distractors: string[] = []
+    while (distractors.length < 3 && pool.length > 0) {
+      const j = Math.floor(Math.random() * pool.length)
+      distractors.push(pool.splice(j, 1)[0])
+    }
+    // if not enough distractors, fabricate mild variations
+    while (distractors.length < 3) {
+      distractors.push('Unknown')
+    }
+    const options = [correct, ...distractors].slice(0, 4)
+    // shuffle options
+    for (let k = options.length - 1; k > 0; k--) {
+      const r = Math.floor(Math.random() * (k + 1)); [options[k], options[r]] = [options[r], options[k]]
+    }
+    const correctIndex = options.indexOf(correct)
+    const qText = `What ${/\b(is|are|was|has|have|includes|consists of)\b/i.test(facts[i]) ? facts[i].replace(/\b(is|are|was|has|have|includes|consists of)\b.*/i, '').trim() : subject}?`
+    questions.push({ question: qText, options, answer: correct, correct: correctIndex })
+  }
+  return questions
+}
+
+
 // ---- Summarize ------------------------------------------------------------
 router.post('/summarize', async (req: Request, res: Response) => {
   try {
-    const { text } = req.body as { text?: string }
+  const { text, desiredWords } = req.body as { text?: string; desiredWords?: number }
     if (!text || !text.trim()) {
       return res.status(400).json({ error: 'Missing text input' })
     }
@@ -140,7 +318,11 @@ router.post('/summarize', async (req: Request, res: Response) => {
       }
     }
 
-    const summary = await summarizeText(text)
+  const opts: any = {}
+  if (typeof desiredWords === 'number' && Number.isFinite(desiredWords) && desiredWords > 0) opts.desiredWords = Number(desiredWords)
+  // Prefer Gemini automatically when configured
+  if (process.env.GEMINI_API_KEY) opts.forceGemini = true
+  const summary = await summarizeText(text, opts)
 
     // increment usage for logged-in users
     if (freshUser && typeof freshUser.incrementUsage === 'function') {
@@ -311,24 +493,30 @@ Quiz:`
     if (process.env.GEMINI_API_KEY) {
       const modelId = process.env.GEMINI_MODEL_ID || 'gemini-2.5-flash'
       const out = await generateWithGemini(modelId, prompt)
+  // Unwrap code blocks first
+  const cleaned = unwrapCodeBlock(out)
       // Try JSON.parse
       try {
-        const parsed = JSON.parse(out)
-        // increment for logged-in users
-        if (freshUserQuiz && typeof freshUserQuiz.incrementUsage === 'function') {
-          try {
-            const r = await freshUserQuiz.incrementUsage('quiz')
-            return res.json({ model: modelId, quiz: parsed, usage: { feature: 'quiz', used: r.used, limit: getLimitForRole(freshUserQuiz.role) } })
-          } catch (e) {
-            console.debug('Failed to increment usage after quiz (gemini json):', e)
+        const parsed = JSON.parse(cleaned)
+        if (Array.isArray(parsed) && parsed.length >= n) {
+          // increment for logged-in users
+          // Normalize to point-only flashcards shape for frontend compatibility
+          const norm = normalizeFlashcardItems(parsed, n)
+          if (freshUserQuiz && typeof freshUserQuiz.incrementUsage === 'function') {
+            try {
+              const r = await freshUserQuiz.incrementUsage('quiz')
+              return res.json({ model: modelId, quiz: parsed, usage: { feature: 'quiz', used: r.used, limit: getLimitForRole(freshUserQuiz.role) } })
+            } catch (e) {
+              console.debug('Failed to increment usage after quiz (gemini json):', e)
+            }
           }
+          return res.json({ model: modelId, quiz: parsed })
         }
-        return res.json({ model: modelId, quiz: parsed })
       } catch {}
 
-      // Try QA-style parser
-      const parsedQA = parseQAFormat(out)
-      if (parsedQA) {
+      // Try QA-style parser on cleaned text
+      const parsedQA = parseQAFormat(cleaned)
+      if (parsedQA && parsedQA.length >= n) {
         if (freshUserQuiz && typeof freshUserQuiz.incrementUsage === 'function') {
           try {
             const r = await freshUserQuiz.incrementUsage('quiz')
@@ -340,30 +528,51 @@ Quiz:`
         return res.json({ model: modelId, quiz: parsedQA })
       }
 
-      // Last resort: return raw text so frontend can display it
-      if (freshUserQuiz && typeof freshUserQuiz.incrementUsage === 'function') {
-        try {
-          const r = await freshUserQuiz.incrementUsage('quiz')
-          return res.json({ model: modelId, quiz: out, usage: { feature: 'quiz', used: r.used, limit: getLimitForRole(freshUserQuiz.role) } })
-        } catch (e) {
-          console.debug('Failed to increment usage after quiz (gemini raw):', e)
+      // If output contains instructional meta (model echoed instructions), consider it malformed and fallback
+      if (/generate\s+exactly\s+\d+/i.test(out) || /generate\s+\d+\s+flashcards?/i.test(out)) {
+        const local = generateQuizLocal(text, n)
+        if (freshUserQuiz && typeof freshUserQuiz.incrementUsage === 'function') {
+          try { const r = await freshUserQuiz.incrementUsage('quiz'); return res.json({ model: 'local-fallback', quiz: local, usage: { feature: 'quiz', used: r.used, limit: getLimitForRole(freshUserQuiz.role) } }) } catch (e) { console.debug('Failed to increment usage after quiz (local):', e) }
         }
+        return res.json({ model: 'local-fallback', quiz: local })
       }
-      return res.json({ model: modelId, quiz: out })
+
+      // As a last attempt, try loose JSON parse of cleaned text and ensure enough items
+      try {
+        const maybeParsed = (() => {
+          try { return JSON.parse(String(cleaned)) } catch { return null }
+        })()
+        if (Array.isArray(maybeParsed) && maybeParsed.length >= n) {
+          return res.json({ model: modelId, quiz: maybeParsed })
+        }
+      } catch (e) {}
+
+      // fallback to local generator
+      const local = generateQuizLocal(text, n)
+      if (freshUserQuiz && typeof freshUserQuiz.incrementUsage === 'function') {
+        try { const r = await freshUserQuiz.incrementUsage('quiz'); return res.json({ model: 'local-fallback', quiz: local, usage: { feature: 'quiz', used: r.used, limit: getLimitForRole(freshUserQuiz.role) } }) } catch (e) { console.debug('Failed to increment usage after quiz (local):', e) }
+      }
+      return res.json({ model: 'local-fallback', quiz: local })
     }
 
     // HF fallback
     const hfOut = await hfGenerateQuiz(text, n)
     const user2: any = (req as any).user
-    if (user2 && typeof user2.incrementUsage === 'function') {
-      try {
-        const r = await user2.incrementUsage('quiz')
-        return res.json({ model: 'hf-fallback', quiz: hfOut, usage: { feature: 'quiz', used: r.used, limit: getLimitForRole(user2.role) } })
-      } catch (e) {
-        console.debug('Failed to increment usage after quiz (hf):', e)
+    // If HF returned usable array with enough items, use it. Otherwise fall back locally
+    let hfQuiz = hfOut
+    try { hfQuiz = typeof hfOut === 'string' ? (JSON.parse(hfOut) as any) : hfOut } catch { /* not JSON */ }
+    if (Array.isArray(hfQuiz) && hfQuiz.length >= n) {
+      if (user2 && typeof user2.incrementUsage === 'function') {
+        try { const r = await user2.incrementUsage('quiz'); return res.json({ model: 'hf-fallback', quiz: hfQuiz, usage: { feature: 'quiz', used: r.used, limit: getLimitForRole(user2.role) } }) } catch (e) { console.debug('Failed to increment usage after quiz (hf):', e) }
       }
+      return res.json({ model: 'hf-fallback', quiz: hfQuiz })
     }
-    return res.json({ model: 'hf-fallback', quiz: hfOut })
+    // fallback local
+    const localQ = generateQuizLocal(text, n)
+    if (user2 && typeof user2.incrementUsage === 'function') {
+      try { const r = await user2.incrementUsage('quiz'); return res.json({ model: 'local-fallback', quiz: localQ, usage: { feature: 'quiz', used: r.used, limit: getLimitForRole(user2.role) } }) } catch (e) { console.debug('Failed to increment usage after quiz (local):', e) }
+    }
+    return res.json({ model: 'local-fallback', quiz: localQ })
   } catch (e: any) {
     console.error('Quiz generation failed:', e)
     return res.status(500).json({ error: e?.message || 'Quiz generation failed' })
@@ -424,41 +633,86 @@ Flashcards:`
     if (process.env.GEMINI_API_KEY) {
       const modelId = process.env.GEMINI_MODEL_ID || 'gemini-2.5-flash'
       const out = await generateWithGemini(modelId, prompt)
+      const cleaned = unwrapCodeBlock(out)
+      // Try strict JSON first
       try {
-        const parsed = JSON.parse(out)
-        if (freshUserFC && typeof freshUserFC.incrementUsage === 'function') {
-          try {
-            const r = await freshUserFC.incrementUsage('flashcards')
-            return res.json({ model: modelId, flashcards: parsed, usage: { feature: 'flashcards', used: r.used, limit: getLimitForRole(freshUserFC.role) } })
-          } catch (e) {
-            console.debug('Failed to increment usage after flashcards (gemini json):', e)
+        const parsed = JSON.parse(cleaned)
+        if (Array.isArray(parsed) && parsed.length >= n) {
+          const norm = normalizeFlashcardItems(parsed, n)
+          if (freshUserFC && typeof freshUserFC.incrementUsage === 'function') {
+            try {
+              const r = await freshUserFC.incrementUsage('flashcards')
+              return res.json({ model: modelId, flashcards: norm, usage: { feature: 'flashcards', used: r.used, limit: getLimitForRole(freshUserFC.role) } })
+            } catch (e) {
+              console.debug('Failed to increment usage after flashcards (gemini json):', e)
+            }
           }
+          return res.json({ model: modelId, flashcards: norm })
         }
-        return res.json({ model: modelId, flashcards: parsed })
       } catch {}
 
-      const parsedCards = parseFlashcardFormat(out)
-      if (parsedCards) {
+      // Try parseFlashcardFormat on cleaned text and ensure enough
+      const parsedCards = parseFlashcardFormat(cleaned)
+      if (parsedCards && parsedCards.length >= n) {
+        const norm = normalizeFlashcardItems(parsedCards, n)
         if (freshUserFC && typeof freshUserFC.incrementUsage === 'function') {
           try {
             const r = await freshUserFC.incrementUsage('flashcards')
-            return res.json({ model: modelId, flashcards: parsedCards, usage: { feature: 'flashcards', used: r.used, limit: getLimitForRole(freshUserFC.role) } })
+            return res.json({ model: modelId, flashcards: norm, usage: { feature: 'flashcards', used: r.used, limit: getLimitForRole(freshUserFC.role) } })
           } catch (e) {
             console.debug('Failed to increment usage after flashcards (gemini parsed):', e)
           }
         }
-        return res.json({ model: modelId, flashcards: parsedCards })
+        return res.json({ model: modelId, flashcards: norm })
       }
 
-      if (freshUserFC && typeof freshUserFC.incrementUsage === 'function') {
-        try {
-          const r = await freshUserFC.incrementUsage('flashcards')
-          return res.json({ model: modelId, flashcards: out, usage: { feature: 'flashcards', used: r.used, limit: getLimitForRole(freshUserFC.role) } })
-        } catch (e) {
-          console.debug('Failed to increment usage after flashcards (gemini raw):', e)
+      // If the model echoed the instruction or returned a small malformed blob, try heuristics
+      if (/generate\s+exactly\s+\d+/i.test(out) || /Generate exactly/i.test(out) || /generate\s+flashcards?/i.test(out)) {
+        const maybe = extractFlashcardsHeuristically(cleaned, n)
+        if (maybe && maybe.length >= n) {
+          const norm = normalizeFlashcardItems(maybe, n)
+          if (freshUserFC && typeof freshUserFC.incrementUsage === 'function') {
+            try { const r = await freshUserFC.incrementUsage('flashcards'); return res.json({ model: modelId + '-heuristic', flashcards: norm, usage: { feature: 'flashcards', used: r.used, limit: getLimitForRole(freshUserFC.role) } }) } catch (e) { console.debug('Failed to increment usage after flashcards (heuristic):', e) }
+          }
+          return res.json({ model: modelId + '-heuristic', flashcards: norm })
         }
+        // Otherwise immediately fallback to local
+        const localCards = generateFlashcardsLocal(text, n)
+        const normLocal = normalizeFlashcardItems(localCards, n)
+        if (freshUserFC && typeof freshUserFC.incrementUsage === 'function') {
+          try { const r = await freshUserFC.incrementUsage('flashcards'); return res.json({ model: 'local-fallback', flashcards: normLocal, usage: { feature: 'flashcards', used: r.used, limit: getLimitForRole(freshUserFC.role) } }) } catch (e) { console.debug('Failed to increment usage after flashcards (local):', e) }
+        }
+        return res.json({ model: 'local-fallback', flashcards: normLocal })
       }
-      return res.json({ model: modelId, flashcards: out })
+
+      // Try heuristic extraction even if no explicit instruction
+      const heuristic = extractFlashcardsHeuristically(cleaned, n)
+      if (heuristic && heuristic.length >= n) {
+        const norm = normalizeFlashcardItems(heuristic, n)
+        if (freshUserFC && typeof freshUserFC.incrementUsage === 'function') {
+          try { const r = await freshUserFC.incrementUsage('flashcards'); return res.json({ model: modelId + '-heuristic', flashcards: norm, usage: { feature: 'flashcards', used: r.used, limit: getLimitForRole(freshUserFC.role) } }) } catch (e) { console.debug('Failed to increment usage after flashcards (heuristic2):', e) }
+        }
+        return res.json({ model: modelId + '-heuristic', flashcards: norm })
+      }
+
+      // As a last attempt, try JSON.parse raw and ensure enough items
+      try {
+        const maybeParsed = (() => {
+          try { return JSON.parse(String(cleaned)) } catch { return null }
+        })()
+        if (Array.isArray(maybeParsed) && maybeParsed.length >= n) {
+          const norm = normalizeFlashcardItems(maybeParsed, n)
+          return res.json({ model: modelId, flashcards: norm })
+        }
+      } catch (e) {}
+
+      // If Gemini output insufficient or malformed, fallback to local generator
+      const localCards = generateFlashcardsLocal(text, n)
+      const normFinal = normalizeFlashcardItems(localCards, n)
+      if (freshUserFC && typeof freshUserFC.incrementUsage === 'function') {
+        try { const r = await freshUserFC.incrementUsage('flashcards'); return res.json({ model: 'local-fallback', flashcards: normFinal, usage: { feature: 'flashcards', used: r.used, limit: getLimitForRole(freshUserFC.role) } }) } catch (e) { console.debug('Failed to increment usage after flashcards (local):', e) }
+      }
+      return res.json({ model: 'local-fallback', flashcards: normFinal })
     }
 
     // HF fallback
@@ -466,12 +720,20 @@ Flashcards:`
     if (freshUserFC && typeof freshUserFC.incrementUsage === 'function') {
       try {
         const r = await freshUserFC.incrementUsage('flashcards')
-        return res.json({ model: 'hf-fallback', flashcards: hfOut, usage: { feature: 'flashcards', used: r.used, limit: getLimitForRole(freshUserFC.role) } })
+        // If HF returned enough cards, use them, otherwise local fallback
+        let hfCards: any = hfOut
+        try { hfCards = typeof hfOut === 'string' ? JSON.parse(hfOut) : hfOut } catch {}
+        if (Array.isArray(hfCards) && hfCards.length >= n) {
+          const norm = normalizeFlashcardItems(hfCards, n)
+          return res.json({ model: 'hf-fallback', flashcards: norm, usage: { feature: 'flashcards', used: r.used, limit: getLimitForRole(freshUserFC.role) } })
+        }
       } catch (e) {
         console.debug('Failed to increment usage after flashcards (hf):', e)
       }
     }
-    return res.json({ model: 'hf-fallback', flashcards: hfOut })
+    // If HF output not sufficient or not array, fallback to local
+    const localCards2 = generateFlashcardsLocal(text, n)
+    return res.json({ model: 'local-fallback', flashcards: localCards2 })
   } catch (e: any) {
     console.error('Flashcard generation failed:', e)
     return res.status(500).json({ error: e?.message || 'Flashcard generation failed' })

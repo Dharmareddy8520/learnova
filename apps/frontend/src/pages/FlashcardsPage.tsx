@@ -4,7 +4,8 @@ import axios from 'axios'
 import { RotateCcw } from 'lucide-react'
 import AppSidebar from '../components/AppSidebar' // ✅ add the global sidebar
 
-type Flashcard = { front: string; back: string }
+// Flashcards are now simple important-point strings (no Q/A pairs)
+type Flashcard = string;
 
 const cls = {
   field:
@@ -23,34 +24,49 @@ const cls = {
 }
 
 function normalizeFlashcards(raw: any): Flashcard[] {
+  // Desired final shape: string[] where each entry is an important point.
   if (Array.isArray(raw)) {
-    return raw
-      .map((c: any) => ({
-        front: c.front ?? c.question ?? '',
-        back: c.back ?? c.answer ?? '',
-      }))
-      .filter((c: Flashcard) => c.front || c.back)
-  }
-  if (typeof raw === 'string') {
-    try {
-      const parsed = JSON.parse(raw)
-      return normalizeFlashcards(parsed)
-    } catch {
-      const blocks = raw
-        .split(/\n(?=Flashcard\s+\d+:)/i)
-        .map((s) => s.trim())
-        .filter(Boolean)
+    // If array of strings, return as-is (filter empties).
+    if (raw.every((r) => typeof r === 'string')) {
+      return raw.map((r) => (r || '').trim()).filter(Boolean);
+    }
 
-      const cards: Flashcard[] = []
-      for (const b of blocks) {
-        const f = b.match(/Front:\s*(.+)/i)?.[1]?.trim() || ''
-        const back = b.match(/Back:\s*(.+)/i)?.[1]?.trim() || ''
-        if (f || back) cards.push({ front: f, back })
+    // If array of objects (old shape), prefer front, then question, then answer.
+    return raw
+      .map((c: any) => String(c.front ?? c.question ?? c.back ?? c.answer ?? '').trim())
+      .filter(Boolean);
+  }
+
+  if (typeof raw === 'string') {
+    // Try JSON first
+    try {
+      const parsed = JSON.parse(raw);
+      return normalizeFlashcards(parsed);
+    } catch {
+      // Heuristic: split by numbered / bullet blocks or Front:/Back: markers
+      const byNumber = raw
+        .split(/\n(?=\d+\.|Flashcard\s+\d+:|\-\s|\*\s)/i)
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      if (byNumber.length > 1) {
+        return byNumber.map((b) => {
+          const front = b.match(/Front:\s*(.+)/i)?.[1]?.trim();
+          if (front) return front;
+          const back = b.match(/Back:\s*(.+)/i)?.[1]?.trim();
+          if (back) return back;
+          // Fallback to first line
+          return b.split('\n')[0].trim();
+        }).filter(Boolean);
       }
-      return cards.length ? cards : [{ front: raw, back: '' }]
+
+      // Last resort: return the whole text as one point
+      const collapsed = raw.trim();
+      return collapsed ? [collapsed] : [];
     }
   }
-  return []
+
+  return [];
 }
 
 const FlashcardsPage: React.FC = () => {
@@ -62,9 +78,10 @@ const FlashcardsPage: React.FC = () => {
   useEffect(() => {
     if (!cards) {
       setCards([
-        { front: 'What is the capital of France?', back: 'Paris' },
-        { front: '2 + 2 = ?', back: '4' },
-        { front: 'Who wrote "Hamlet"?', back: 'William Shakespeare' },
+        'The Moon is Earth’s only natural satellite.',
+        'It is the fifth largest satellite in the Solar System.',
+        'The dark areas on its surface are called maria.',
+        'The Moon has a diameter of 3474 km.'
       ])
     }
   }, [cards])
@@ -190,16 +207,12 @@ const FlashcardsPage: React.FC = () => {
               {cards.map((c, i) => (
                 <div
                   key={i}
-                  className="group cursor-pointer rounded-2xl bg-gradient-to-br from-indigo-50 to-white p-5 shadow-sm hover:shadow-md transition"
+                  className="rounded-2xl bg-gradient-to-br from-indigo-50 to-white p-5 shadow-sm hover:shadow-md transition"
                 >
                   <div className="text-sm font-semibold text-indigo-600 mb-2">
                     Flashcard {i + 1}
                   </div>
-                  <div className="text-gray-800 font-medium mb-1">{c.front}</div>
-                  <div className="hidden group-hover:block text-sm text-gray-600 mt-2 transition">
-                    <span className="font-semibold text-indigo-700">Answer:</span>{' '}
-                    {c.back}
-                  </div>
+                  <div className="text-gray-800 font-medium mb-1">{c}</div>
                 </div>
               ))}
             </div>

@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { Upload, FileText, Clock, CheckCircle, AlertCircle, RotateCcw, Play, ChevronRight, ChevronLeft, Eye, EyeOff, MessageSquare, Copy, Check } from 'lucide-react';
+import { FileText, Clock, CheckCircle, AlertCircle, RotateCcw, Play, ChevronRight, ChevronLeft, Eye, MessageSquare, Copy, Check } from 'lucide-react';
 
 // Types for interactive components
 type Question = {
@@ -9,10 +9,8 @@ type Question = {
   correct?: number;
 };
 
-type Flashcard = {
-  front: string;
-  back: string;
-};
+// Flashcards are now simple important-point strings (no Q/A pairs)
+type Flashcard = string;
 
 type QAItem = {
   question: string;
@@ -82,33 +80,48 @@ function normalizeQuiz(raw: any): Question[] {
 }
 
 function normalizeFlashcards(raw: any): Flashcard[] {
+  // Desired final shape: string[] where each entry is an important point.
   if (Array.isArray(raw)) {
+    // If array of strings, return as-is (filter empties).
+    if (raw.every((r) => typeof r === 'string')) {
+      return raw.map((r) => (r || '').trim()).filter(Boolean);
+    }
+
+    // If array of objects (old shape), prefer front, then question, then answer.
     return raw
-      .map((c: any) => ({
-        front: c.front ?? c.question ?? '',
-        back: c.back ?? c.answer ?? '',
-      }))
-      .filter((c: Flashcard) => c.front || c.back);
+      .map((c: any) => String(c.front ?? c.question ?? c.back ?? c.answer ?? '').trim())
+      .filter(Boolean);
   }
+
   if (typeof raw === 'string') {
+    // Try JSON first
     try {
       const parsed = JSON.parse(raw);
       return normalizeFlashcards(parsed);
     } catch {
-      const blocks = raw
-        .split(/\n(?=Flashcard\s+\d+:)/i)
+      // Heuristic: split by numbered / bullet blocks or Front:/Back: markers
+      const byNumber = raw
+        .split(/\n(?=\d+\.|Flashcard\s+\d+:|\-\s|\*\s)/i)
         .map((s) => s.trim())
         .filter(Boolean);
 
-      const cards: Flashcard[] = [];
-      for (const b of blocks) {
-        const front = b.match(/Front:\s*(.+)/i)?.[1]?.trim() || '';
-        const back = b.match(/Back:\s*(.+)/i)?.[1]?.trim() || '';
-        if (front || back) cards.push({ front, back });
+      if (byNumber.length > 1) {
+        return byNumber.map((b) => {
+          const front = b.match(/Front:\s*(.+)/i)?.[1]?.trim();
+          if (front) return front;
+          const back = b.match(/Back:\s*(.+)/i)?.[1]?.trim();
+          if (back) return back;
+          // Fallback to first line
+          return b.split('\n')[0].trim();
+        }).filter(Boolean);
       }
-      return cards.length ? cards : [{ front: raw, back: '' }];
+
+      // Last resort: return the whole text as one point
+      const collapsed = raw.trim();
+      return collapsed ? [collapsed] : [];
     }
   }
+
   return [];
 }
 
@@ -182,6 +195,8 @@ const QuizPlayer: React.FC<{ questions: Question[], onRestart: () => void }> = (
         </div>
       </div>
 
+      
+
       {/* Question card */}
       <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold mb-4">{q.question}</h2>
@@ -251,21 +266,14 @@ const QuizPlayer: React.FC<{ questions: Question[], onRestart: () => void }> = (
 };
 
 // Interactive Flashcard Viewer Component (based on FlashcardsPage.tsx)
+// Simple study viewer for point-only flashcards (no Q/A flipping)
 const FlashcardViewer: React.FC<{ cards: Flashcard[] }> = ({ cards }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [isFlipped, setIsFlipped] = useState(false);
 
-  const currentCard = cards[currentIndex];
+  if (!cards || cards.length === 0) return null;
 
-  const handleNext = () => {
-    setCurrentIndex((prev) => (prev + 1) % cards.length);
-    setIsFlipped(false);
-  };
-
-  const handlePrev = () => {
-    setCurrentIndex((prev) => (prev - 1 + cards.length) % cards.length);
-    setIsFlipped(false);
-  };
+  const handleNext = () => setCurrentIndex((i) => Math.min(i + 1, cards.length - 1));
+  const handlePrev = () => setCurrentIndex((i) => Math.max(i - 1, 0));
 
   return (
     <div className="space-y-4">
@@ -273,52 +281,27 @@ const FlashcardViewer: React.FC<{ cards: Flashcard[] }> = ({ cards }) => {
         <h3 className="text-lg font-semibold text-gray-900">
           Flashcard {currentIndex + 1} of {cards.length}
         </h3>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setIsFlipped(!isFlipped)}
-            className="inline-flex items-center gap-2 px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition"
-          >
-            {isFlipped ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            {isFlipped ? 'Hide Answer' : 'Show Answer'}
-          </button>
-        </div>
+        <div className="text-sm text-gray-600">Study the key points below</div>
       </div>
 
       <div className="relative">
-        <div 
-          className="h-48 bg-white rounded-xl border border-gray-200 shadow-sm cursor-pointer transition-transform hover:scale-[1.02]"
-          onClick={() => setIsFlipped(!isFlipped)}
-        >
-          <div className="h-full p-6 flex items-center justify-center">
-            <div className="text-center">
-              <p className="text-lg font-medium text-gray-900 mb-2">
-                {isFlipped ? 'Answer:' : 'Question:'}
-              </p>
-              <p className="text-gray-700">
-                {isFlipped ? currentCard.back : currentCard.front}
-              </p>
-            </div>
+        <div className="h-48 bg-white rounded-xl border border-gray-200 shadow-sm p-6 flex items-center justify-center">
+          <div className="text-center">
+            <p className="text-lg font-medium text-gray-900 mb-2">Key Point</p>
+            <p className="text-gray-700 leading-relaxed">{cards[currentIndex]}</p>
           </div>
         </div>
       </div>
 
       <div className="flex justify-between items-center">
-        <button
-          onClick={handlePrev}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition"
-        >
+        <button onClick={handlePrev} className="inline-flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition" disabled={currentIndex === 0}>
           <ChevronLeft className="h-4 w-4" />
           Previous
         </button>
-        
-        <span className="text-sm text-gray-600">
-          Click card to flip
-        </span>
-        
-        <button
-          onClick={handleNext}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition"
-        >
+
+        <span className="text-sm text-gray-600">Navigate through the key points</span>
+
+        <button onClick={handleNext} className="inline-flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition" disabled={currentIndex === cards.length - 1}>
           Next
           <ChevronRight className="h-4 w-4" />
         </button>
@@ -328,7 +311,7 @@ const FlashcardViewer: React.FC<{ cards: Flashcard[] }> = ({ cards }) => {
 };
 
 // Interactive Q&A Component (based on QAPage.tsx)
-const QASection: React.FC<{ hasContent: boolean }> = ({ hasContent }) => {
+const QASection: React.FC<{ hasContent: boolean; context: string }> = ({ hasContent, context }) => {
   const [question, setQuestion] = useState('');
   const [loading, setLoading] = useState(false);
   const [history, setHistory] = useState<QAItem[]>([]);
@@ -344,10 +327,11 @@ const QASection: React.FC<{ hasContent: boolean }> = ({ hasContent }) => {
     }
     setLoading(true);
     try {
+      // send context + question so backend can run extractive QA over the document
       const response = await fetch('/api/qa', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question })
+        body: JSON.stringify({ context: context || '', question })
       });
       const data = await response.json();
       
@@ -455,6 +439,8 @@ const QASection: React.FC<{ hasContent: boolean }> = ({ hasContent }) => {
 
 const FileUploadSummary: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
+  const [inputMode, setInputMode] = useState<'file' | 'text'>('file');
+  const [pastedText, setPastedText] = useState('');
   const [jobStatus, setJobStatus] = useState<JobStatus | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -464,6 +450,9 @@ const FileUploadSummary: React.FC = () => {
     qa: boolean;
     flashcards: boolean;
   }>({ summarize: true, quiz: false, qa: false, flashcards: false });
+  const [desiredWords, setDesiredWords] = useState<string>('200');
+  const [quizCount, setQuizCount] = useState<string>('8');
+  const [flashcardCount, setFlashcardCount] = useState<string>('12');
   
   // Interactive mode states
   const [interactiveMode, setInteractiveMode] = useState<{
@@ -518,7 +507,31 @@ const FileUploadSummary: React.FC = () => {
   };
 
   const uploadAndAnalyze = async () => {
-    if (!file) return;
+    if (inputMode === 'text' && pastedText.trim()) {
+      setIsUploading(true);
+      setError(null);
+      resetInteractiveMode();
+      try {
+        // Directly send pasted text to backend (simulate upload)
+        const response = await fetch('/api/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: pastedText,
+            tasks: getTransformedTasks(),
+          }),
+        });
+        if (!response.ok) throw new Error(`Analysis failed: ${response.statusText}`);
+        const data = await response.json();
+        pollJobStatus(data.jobId);
+      } catch (err: any) {
+        setError(err.message || 'Analysis failed');
+      } finally {
+        setIsUploading(false);
+      }
+      return;
+    }
+    if (inputMode === 'file' && !file) return;
 
     setIsUploading(true);
     setError(null);
@@ -527,7 +540,7 @@ const FileUploadSummary: React.FC = () => {
     try {
       // Upload file
       const formData = new FormData();
-      formData.append('file', file);
+      if (file) formData.append('file', file);
 
       const uploadResponse = await fetch('/api/upload', {
         method: 'POST',
@@ -541,28 +554,13 @@ const FileUploadSummary: React.FC = () => {
       const uploadData = await uploadResponse.json();
       const uploadId = uploadData.uploadId;
 
-      // Transform selectedTasks to backend format
-      const transformedTasks: any = {};
-      if (selectedTasks.summarize) {
-        transformedTasks.summarize = true;
-      }
-      if (selectedTasks.quiz) {
-        transformedTasks.quiz = { numQuestions: 8 }; // Default to 8 questions
-      }
-      if (selectedTasks.qa) {
-        transformedTasks.qa = true;
-      }
-      if (selectedTasks.flashcards) {
-        transformedTasks.flashcards = { count: 12 }; // Default to 12 flashcards
-      }
-
       // Start analysis
       const analyzeResponse = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           uploadId,
-          tasks: transformedTasks,
+          tasks: getTransformedTasks(),
         }),
       });
 
@@ -571,14 +569,33 @@ const FileUploadSummary: React.FC = () => {
       }
 
       const analyzeData = await analyzeResponse.json();
-
-      // Poll for status
       pollJobStatus(analyzeData.jobId);
     } catch (err: any) {
       setError(err.message || 'Upload and analysis failed');
     } finally {
       setIsUploading(false);
     }
+  };
+
+  // Helper to build tasks object
+  const getTransformedTasks = () => {
+    const transformedTasks: any = {};
+    if (selectedTasks.summarize) {
+      const w = Number(desiredWords);
+      transformedTasks.summarize = (Number.isFinite(w) && w > 0) ? { desiredWords: w } : true;
+    }
+    if (selectedTasks.quiz) {
+      const n = Number(quizCount);
+      transformedTasks.quiz = (Number.isFinite(n) && n > 0 && n <= 25) ? { numQuestions: n } : { numQuestions: 8 };
+    }
+    if (selectedTasks.qa) {
+      transformedTasks.qa = true;
+    }
+    if (selectedTasks.flashcards) {
+      const m = Number(flashcardCount);
+      transformedTasks.flashcards = (Number.isFinite(m) && m > 0 && m <= 50) ? { count: m } : { count: 12 };
+    }
+    return transformedTasks;
   };
 
   const pollJobStatus = useCallback(async (id: string) => {
@@ -628,22 +645,56 @@ const FileUploadSummary: React.FC = () => {
         <p className="text-gray-600">Upload a document and choose which AI tasks to perform</p>
       </div>
 
-      {/* Upload Section */}
-      <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
-        <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-        <div className="space-y-2">
-          <p className="text-lg font-medium text-gray-900">
-            {file ? file.name : 'Choose a file to upload'}
-          </p>
-          <p className="text-gray-500">PDF, DOC, DOCX, TXT files supported</p>
-        </div>
-        <input
-          type="file"
-          onChange={handleFileChange}
-          accept=".pdf,.doc,.docx,.txt"
-          className="mt-4"
-        />
+      {/* Input Mode Toggle */}
+      <div className="flex justify-center gap-4 mb-4">
+        <button
+          type="button"
+          className={`px-4 py-2 rounded-lg font-medium border transition-colors ${inputMode === 'file' ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-blue-700 border-blue-300 hover:bg-blue-50'}`}
+          onClick={() => {
+            setInputMode('file');
+            setTimeout(() => {
+              document.getElementById('hidden-file-input')?.click();
+            }, 0);
+          }}
+        >
+          Upload File
+        </button>
+        <button
+          type="button"
+          className={`px-4 py-2 rounded-lg font-medium border transition-colors ${inputMode === 'text' ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-blue-700 border-blue-300 hover:bg-blue-50'}`}
+          onClick={() => setInputMode('text')}
+        >
+          Paste Text
+        </button>
       </div>
+
+      {/* Upload or Paste Section */}
+      {inputMode === 'file' ? (
+        <>
+          <input
+            id="hidden-file-input"
+            type="file"
+            onChange={e => {
+              handleFileChange(e);
+              if (e.target.files?.[0]) {
+                setTimeout(() => uploadAndAnalyze(), 0);
+              }
+            }}
+            accept=".pdf,.doc,.docx,.txt"
+            className="hidden"
+          />
+        </>
+      ) : (
+        <div className="border-2 border-dashed border-blue-300 rounded-lg p-6 bg-blue-50">
+          <textarea
+            className="w-full min-h-[120px] rounded-lg border border-blue-200 p-3 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            placeholder="Paste or type your document text here..."
+            value={pastedText}
+            onChange={e => setPastedText(e.target.value)}
+            disabled={isUploading}
+          />
+        </div>
+      )}
 
       {/* Task Selection */}
       <div className="space-y-3">
@@ -663,14 +714,66 @@ const FileUploadSummary: React.FC = () => {
         </div>
       </div>
 
+      {/* Summarization options */}
+      {selectedTasks.summarize && (
+        <div className="mt-2 flex items-center gap-3">
+          <label className="text-sm text-gray-700">Summary length (words):</label>
+          <input
+            type="number"
+            min={20}
+            max={5000}
+            value={desiredWords}
+            onChange={(e) => setDesiredWords(e.target.value)}
+            className="w-32 px-3 py-2 border border-gray-200 rounded-md"
+          />
+          <p className="text-sm text-gray-500">Approximate word target for the summary.</p>
+        </div>
+      )}
+
+      {/* Quiz / Flashcards count inputs */}
+      {selectedTasks.quiz && (
+        <div className="mt-2 flex items-center gap-3">
+          <label className="text-sm text-gray-700">Quiz questions:</label>
+          <input
+            type="number"
+            min={1}
+            max={25}
+            value={quizCount}
+            onChange={(e) => setQuizCount(e.target.value)}
+            className="w-32 px-3 py-2 border border-gray-200 rounded-md"
+          />
+          <p className="text-sm text-gray-500">Number of multiple-choice questions (1–25).</p>
+        </div>
+      )}
+
+      {selectedTasks.flashcards && (
+        <div className="mt-2 flex items-center gap-3">
+          <label className="text-sm text-gray-700">Flashcards:</label>
+          <input
+            type="number"
+            min={1}
+            max={50}
+            value={flashcardCount}
+            onChange={(e) => setFlashcardCount(e.target.value)}
+            className="w-32 px-3 py-2 border border-gray-200 rounded-md"
+          />
+          <p className="text-sm text-gray-500">Number of flashcards to generate (1–50).</p>
+        </div>
+      )}
+
       {/* Upload Button */}
       <button
         onClick={uploadAndAnalyze}
-        disabled={!file || isUploading || !Object.values(selectedTasks).some(Boolean)}
+        disabled={
+          (inputMode === 'file' && !file) ||
+          (inputMode === 'text' && !pastedText.trim()) ||
+          isUploading ||
+          !Object.values(selectedTasks).some(Boolean)
+        }
         className="w-full flex items-center justify-center space-x-2 py-3 px-6 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       >
         <FileText className="h-5 w-5" />
-        <span>{isUploading ? 'Processing...' : 'Upload and Analyze'}</span>
+        <span>{isUploading ? (inputMode === 'text' ? 'Analyzing...' : 'Processing...') : (inputMode === 'text' ? 'Analyze Text' : 'Upload and Analyze')}</span>
       </button>
 
       {/* Error Display */}
@@ -706,6 +809,13 @@ const FileUploadSummary: React.FC = () => {
                   <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
                     <p className="text-gray-800 leading-relaxed">{jobStatus.results.summary}</p>
                   </div>
+                </div>
+              )}
+              {/* If job finished but no summary, show any summary-specific errors for debugging */}
+              {!jobStatus.results?.summary && jobStatus.errors?.summary && (
+                <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <h3 className="font-medium text-yellow-800">Summary completed with issues</h3>
+                  <pre className="text-sm text-yellow-700 whitespace-pre-wrap">{String(jobStatus.errors.summary)}</pre>
                 </div>
               )}
 
@@ -829,9 +939,17 @@ const FileUploadSummary: React.FC = () => {
               })()}
 
               {/* Q&A Section - Only show if Q&A was requested */}
-              {jobStatus.results.qa && (
-                <QASection hasContent={Boolean(jobStatus.results.summary || jobStatus.results.quiz || jobStatus.results.flashcards)} />
-              )}
+              {jobStatus.results.qa && (() => {
+                // Build a reasonable context for QA: prefer summary, otherwise join flashcards or quiz text
+                const ctx = jobStatus.results.summary
+                  || (Array.isArray(jobStatus.results.flashcards) ? jobStatus.results.flashcards.map((c: any) => {
+                      if (typeof c === 'string') return c;
+                      return String(c.front ?? c.question ?? c.back ?? c.answer ?? '').trim();
+                    }).join('\n') : '')
+                  || (Array.isArray(jobStatus.results.quiz) ? jobStatus.results.quiz.map((q: any) => q.question || '').join('\n') : '')
+                  || '';
+                return <QASection hasContent={Boolean(ctx)} context={ctx} />
+              })()}
             </div>
           )}
 
@@ -843,6 +961,13 @@ const FileUploadSummary: React.FC = () => {
               </pre>
             </div>
           )}
+              {/* Debug: raw job status (helpful when summary missing) */}
+              {!jobStatus.results?.summary && (
+                <details className="mt-4">
+                  <summary className="cursor-pointer text-sm text-gray-600">Show raw job status (debug)</summary>
+                  <pre className="text-xs mt-2 p-2 bg-gray-50 border rounded">{JSON.stringify(jobStatus, null, 2)}</pre>
+                </details>
+              )}
         </div>
       )}
 
@@ -867,4 +992,5 @@ const FileUploadSummary: React.FC = () => {
   );
 };
 
+export { normalizeFlashcards };
 export default FileUploadSummary;
