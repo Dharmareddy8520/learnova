@@ -19,7 +19,7 @@ function chunkText(text: string, maxChars = DEFAULT_CHUNK_CHAR_LIMIT): string[] 
 }
 
 async function summarizeChunk(text: string, maxWords: number, model = MODEL): Promise<string> {
-  const prompt = `You are a precise summarizer.\n\nSummarize the following text in about ${maxWords} words.\nThe summary should be clear, coherent, and must not add new facts.\n\nTEXT:\n${text}`
+  const prompt = `You are a precise summarizer.\n\nSummarize the following text in approximately ${maxWords} words. The summary should be clear, coherent, and must not add new facts.\n\nTEXT:\n${text}`
   const out = await generateWithGemini(model, prompt)
   return String(out || '').trim()
 }
@@ -52,7 +52,7 @@ export async function summarizeDocumentWithGemini(text: string, desiredWords = 2
   if (partialSummaries.length === 0) throw new Error('Failed to summarize any chunks with Gemini')
 
   const combined = partialSummaries.join('\n\n')
-  const finalPrompt = `You are a summarization expert.\n\nYou are given summaries of different chunks from a single document. Combine them into ONE final summary of about ${desiredWords} words.\n\nMake the result:\n- Non-redundant\n- Well structured\n- Easy to read\n- Faithful to the content\n\nChunk summaries:\n${combined}`
+  const finalPrompt = `You are a summarization expert.\n\nYou are given summaries of different chunks from a single document. Combine them into ONE final summary of approximately ${desiredWords} words.\n\nMake the result:\n- Non-redundant\n- Well structured\n- Easy to read\n- Faithful to the content\n\nChunk summaries:\n${combined}`
 
   const finalOut = await generateWithGemini(model, finalPrompt)
   return String(finalOut || '').trim()

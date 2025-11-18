@@ -674,12 +674,7 @@ const FileUploadSummary: React.FC = () => {
           <input
             id="hidden-file-input"
             type="file"
-            onChange={e => {
-              handleFileChange(e);
-              if (e.target.files?.[0]) {
-                setTimeout(() => uploadAndAnalyze(), 0);
-              }
-            }}
+            onChange={handleFileChange}
             accept=".pdf,.doc,.docx,.txt"
             className="hidden"
           />

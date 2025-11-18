@@ -42,8 +42,13 @@ export async function generateWithGemini(
             parts: [{ text: prompt }],
           },
         ];
+        console.log(`[Gemini] Using key #${keyIdx + 1}/${apiKeys.length}, attempt ${attempt}/${maxAttempts}`);
+        console.log(`[Gemini] Prompt (first 200 chars):`, prompt.slice(0, 200));
         const resp = await model.generateContent({ contents });
-        return resp.response.text();
+        const result = resp.response.text();
+        const wordCount = result.split(/\s+/).filter(Boolean).length;
+        console.log(`[Gemini] Summary length: ${wordCount} words`);
+        return result;
       } catch (err: any) {
         const msg = err?.error?.message || err?.message || String(err);
 

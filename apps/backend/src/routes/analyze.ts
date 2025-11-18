@@ -164,7 +164,7 @@ router.post('/analyze', express.json(), async (req: Request, res: Response) => {
       jobsStore[jobId].status = 'running';
   // For pasted text, treat as a single chunk, not folder-like
   const isFolderLike = uploadMeta && (uploadMeta as any).ext === 'zip' || (uploadMeta as any).mime === 'application/zip';
-      const preferGemini = Boolean(process.env.GEMINI_API_KEY);
+      const preferGemini = Boolean(process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY);
       const forceGemini = preferGemini;
       console.log('📋 Job config: isFolderLike=', isFolderLike, 'preferGemini=', preferGemini, 'tasks=', Object.keys(tasks).filter(k => tasks[k]));
       const results: any = {};

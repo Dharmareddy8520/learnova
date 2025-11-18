@@ -44,7 +44,7 @@ function getUsedForUser(user: any, feature: string) {
 router.get('/status', (_req: Request, res: Response) => {
   res.json({
     hfConfigured: Boolean(HF_API_KEY),
-    geminiConfigured: Boolean(process.env.GEMINI_API_KEY),
+    geminiConfigured: Boolean(process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY),
   })
 })
 
@@ -88,7 +88,18 @@ function parseFlashcardFormat(rawText: string) {
   const cards: any[] = []
   let i = 0
   while (i < lines.length) {
-    // Accept patterns like 'Front: ...' 'Back: ...' blocks or 'Q:' / 'A:' pairs
+    // Accept patterns like 'Term: ...' 'Definition: ...' blocks (new format)
+    if (/^Term[:\s]/i.test(lines[i])) {
+      const term = lines[i].replace(/^Term[:\s]+/i, '').trim()
+      i++
+      let definition = ''
+      if (i < lines.length && /^Definition[:\s]/i.test(lines[i])) {
+        definition = lines[i].replace(/^Definition[:\s]+/i, '').trim(); i++
+      }
+      if (term) cards.push({ front: term, back: definition })
+      continue
+    }
+    // Accept patterns like 'Front: ...' 'Back: ...' blocks (legacy format)
     if (/^Front[:\s]/i.test(lines[i])) {
       const front = lines[i].replace(/^Front[:\s]+/i, '').trim()
       i++
@@ -99,6 +110,7 @@ function parseFlashcardFormat(rawText: string) {
       if (front) cards.push({ front, back })
       continue
     }
+    // Accept 'Q:' / 'A:' pairs
     if (/^Q[:\s]/i.test(lines[i])) {
       const q = lines[i].replace(/^Q[:\s]+/i, '').trim(); i++
       let a = ''
@@ -122,7 +134,7 @@ function unwrapCodeBlock(s: string | undefined) {
   return out.trim()
 }
 
-// Heuristic extractor: look for numbered Flashcard blocks or Front:/Back: patterns
+// Heuristic extractor: look for numbered Flashcard blocks or Term:/Definition: or Front:/Back: patterns
 function extractFlashcardsHeuristically(rawText: string, n: number) {
   if (!rawText) return null
   const cleaned = unwrapCodeBlock(rawText)
@@ -147,7 +159,16 @@ function extractFlashcardsHeuristically(rawText: string, n: number) {
   const cards: any[] = []
   for (const blk of blocks) {
     if (cards.length >= n) break
-    // try Front: / Back:
+    // try Term: / Definition: (new format)
+    const mTerm = blk.match(/Term[:\s-]*([^\n\r]+)/i)
+    const mDef = blk.match(/Definition[:\s-]*([^\n\r]+)/i)
+    if (mTerm) {
+      const term = mTerm[1].trim()
+      const def = mDef ? mDef[1].trim() : blk.replace(mTerm[0], '').trim()
+      cards.push({ front: term + (term.endsWith('.') ? '' : '...'), back: def })
+      continue
+    }
+    // try Front: / Back: (legacy format)
     const mFront = blk.match(/Front[:\s-]*([^\n\r]+)/i)
     const mBack = blk.match(/Back[:\s-]*([^\n\r]+)/i)
     if (mFront) {
@@ -321,7 +342,7 @@ router.post('/summarize', async (req: Request, res: Response) => {
   const opts: any = {}
   if (typeof desiredWords === 'number' && Number.isFinite(desiredWords) && desiredWords > 0) opts.desiredWords = Number(desiredWords)
   // Prefer Gemini automatically when configured
-  if (process.env.GEMINI_API_KEY) opts.forceGemini = true
+  if (process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY) opts.forceGemini = true
   const summary = await summarizeText(text, opts)
 
     // increment usage for logged-in users
@@ -490,7 +511,7 @@ Quiz:`
         }
       }
     }
-    if (process.env.GEMINI_API_KEY) {
+    if (process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY) {
       const modelId = process.env.GEMINI_MODEL_ID || 'gemini-2.5-flash'
       const out = await generateWithGemini(modelId, prompt)
   // Unwrap code blocks first
@@ -596,11 +617,11 @@ router.post('/flashcards/generate', async (req: Request, res: Response) => {
 Context: The Moon is Earth's only natural satellite. It is the fifth largest satellite in the Solar System. The dark areas on its surface are called maria.
 Flashcards:
 Flashcard 1:
-Front: What is Earth's only natural satellite?
-Back: The Moon
+Term: Earth's only natural satellite
+Definition: The Moon
 Flashcard 2:
-Front: What are the dark areas on the Moon's surface called?
-Back: Maria
+Term: Dark areas on the Moon's surface
+Definition: Maria
 [END OF EXAMPLE]`
 
     const prompt =
@@ -630,7 +651,7 @@ Flashcards:`
     }
 
     // Try Gemini first and coerce to structured JSON
-    if (process.env.GEMINI_API_KEY) {
+    if (process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY) {
       const modelId = process.env.GEMINI_MODEL_ID || 'gemini-2.5-flash'
       const out = await generateWithGemini(modelId, prompt)
       const cleaned = unwrapCodeBlock(out)
