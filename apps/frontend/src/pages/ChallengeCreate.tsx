@@ -499,15 +499,6 @@ const ChallengeCreate = () => {
   }, [challenge.state, timeRemaining])
 
   // Handlers
-  const getInviteLinkFor = () => {
-    try {
-      const base = window.location.origin + window.location.pathname.replace('/challenge/create', '/quiz-generator')
-      return `${base}?join=${challenge.joinCode || ''}`
-    } catch {
-      return `?join=${challenge.joinCode || ''}`
-    }
-  }
-
   const copyToClipboard = (text: string) => {
     try {
       navigator.clipboard.writeText(text)
