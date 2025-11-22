@@ -24,6 +24,7 @@ import cardsRoutes from './routes/cards';
 import foldersRoutes from './routes/folders';
 import documentsRoutes from './routes/documents';
 import { isAuthenticated } from './middleware/auth';
+import challengeRoutes from './routes/challenge';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -146,6 +147,9 @@ app.post('/api/billing/stripe-webhook', express.raw({ type: 'application/json' }
 // Usage meta endpoint
 app.use('/api/usage', usageRoutes);
 
+// Challenge routes
+app.use('/api/challenge', challengeRoutes);
+
 // Personal cards endpoint
 app.use('/api/cards', isAuthenticated, cardsRoutes);
 
@@ -155,6 +159,17 @@ app.use('/api/folders', isAuthenticated, foldersRoutes);
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
+});
+
+// Server time endpoint - returns current server time in milliseconds
+// Used as reference for quiz timing to prevent client-side manipulation
+app.get('/api/server-time', (req, res) => {
+  const now = Date.now();
+  res.json({ 
+    timestamp: now,
+    iso: new Date(now).toISOString(),
+    serverTime: now // Unix timestamp in milliseconds
+  });
 });
 
 // Error handling middleware

@@ -8,6 +8,7 @@ import LoginPage from './pages/LoginPage'
 import Dashboard from './pages/Dashboard'
 import MLTools from './pages/MLTools'
 import QuizGenerator from './pages/QuizGenerator'
+import ChallengeCreate from './pages/ChallengeCreate'
 import FlashcardsPage from './pages/FlashcardsPage'
 import ProfilePage from './pages/ProfilePage'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -29,6 +30,7 @@ function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/tools" element={<MLTools />} />
           <Route path="/quiz-generator" element={<QuizGenerator />} />
+          <Route path="/challenge/create" element={<ChallengeCreate />} />
           <Route path="/flashcards" element={<FlashcardsPage />} />
           <Route path="/summarizer" element={<FileSummarizerPage />} />
           <Route path="/analyzer" element={<DocumentAnalyzerPage />} />

@@ -1,5 +1,6 @@
 // src/pages/QuizGenerator.tsx
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { Play, RotateCcw, ChevronRight } from 'lucide-react'
 import AppSidebar from '../components/AppSidebar' // <-- use your working sidebar
@@ -319,6 +320,7 @@ function QuizPlayer({
 
 /* ------------------------------ main page ------------------------------- */
 const QuizGenerator = () => {
+  const navigate = useNavigate()
   const [formData, setFormData] = useState({
     text: '',
     numQuestions: 5,
@@ -328,6 +330,7 @@ const QuizGenerator = () => {
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [started, setStarted] = useState(false)
+  const [joinInput, setJoinInput] = useState('')
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
@@ -364,18 +367,44 @@ const QuizGenerator = () => {
     setStarted(false)
   }
 
+  const handleJoinChallenge = () => {
+    if (!joinInput.trim()) {
+      alert('Please paste an invitation link or code')
+      return
+    }
+    // Navigate to challenge with the code as parameter
+    navigate(`/challenge/create?join=${encodeURIComponent(joinInput)}`)
+  }
+
   const header = useMemo(
     () => (
-      <div className="flex items-center gap-3 mb-4">
+      <div className="flex items-center justify-between gap-4 mb-8">
         <h1 className="text-3xl font-bold text-indigo-700">✨ Quiz Generator</h1>
-        {started && (
-          <span className="ml-2 text-xs rounded-full bg-indigo-50 text-indigo-700 px-2 py-1 ring-1 ring-indigo-200">
-            Interactive mode
-          </span>
-        )}
+        <div className="flex items-center gap-3">
+          <input
+            type="text"
+            value={joinInput}
+            onChange={(e) => setJoinInput(e.target.value)}
+            placeholder="Paste invite link or code..."
+            className="px-4 py-2 rounded-lg border border-gray-300 bg-white text-sm w-80 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            onKeyPress={(e) => e.key === 'Enter' && handleJoinChallenge()}
+          />
+          <button
+            onClick={handleJoinChallenge}
+            className={`${ui.btn} ${ui.primary} px-6 py-2`}
+          >
+            Join
+          </button>
+          <button
+            onClick={() => navigate('/challenge/create')}
+            className={`${ui.btn} ${ui.primary} px-6 py-2`}
+          >
+            Create Challenge
+          </button>
+        </div>
       </div>
     ),
-    [started]
+    [started, joinInput, navigate]
   )
 
   return (
@@ -472,6 +501,14 @@ const QuizGenerator = () => {
             {quiz && <QuizPlayer quiz={quiz} onRestart={onRestart} />}
           </div>
         )}
+        <div className="mt-8 max-w-2xl">
+          <button
+            onClick={() => navigate('/challenge/create')}
+            className={`${ui.btn} ${ui.primary} px-8 py-4 text-lg`}
+          >
+            🎯 Create Challenge
+          </button>
+        </div>
       </main>
     </div>
   )
