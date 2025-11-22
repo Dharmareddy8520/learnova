@@ -1,0 +1,6 @@
+This is a simple text file for testing.
+It contains extractable content.
+The Moon is Earth's sole natural satellite.
+It has a diameter of 3,474 km.
+It orbits Earth every 27.3 days.
+It is the fifth largest moon in the Solar System.

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { Brain, Eye, EyeOff } from 'lucide-react'
+import { Brain, Eye, EyeOff, ArrowLeft } from 'lucide-react'
 
 const SignupPage = () => {
   const [formData, setFormData] = useState({
@@ -63,9 +63,26 @@ const SignupPage = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+      {/* Back Button */}
+      <div className="sm:mx-auto sm:w-full sm:max-w-md mb-4">
+        <button
+          onClick={() => navigate('/')}
+          className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to home
+        </button>
+      </div>
+
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
-          <Brain className="h-12 w-12 text-primary-600" />
+          <button
+            onClick={() => navigate('/')}
+            className="flex items-center justify-center hover:opacity-80 transition"
+            aria-label="Go to home"
+          >
+            <Brain className="h-12 w-12 text-primary-600" />
+          </button>
         </div>
         <h2 className="mt-6 text-center text-3xl font-bold text-gray-900">
           Create your account

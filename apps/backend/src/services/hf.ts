@@ -1,5 +1,6 @@
 import path from 'path'
 import { generateWithGemini } from './gemini'
+import summarizeDocumentWithGemini from './geminiSummarizer'
 
 // Centralize Gemini model selection. Set `GEMINI_MODEL` in env to override.
 const DEFAULT_GEMINI_MODEL = (process.env.GEMINI_MODEL || 'gemini-2.5-pro').trim()
@@ -86,6 +87,84 @@ function redactSensitive(input: string) {
   return input.replace(urlRe, '[LINK]').replace(wwwRe, '[LINK]').replace(emailRe, '[EMAIL]')
 }
 
+// Utility: unwrap fenced code blocks
+function unwrapCodeBlock(s: string | undefined) {
+  if (!s) return ''
+  let out = String(s).trim()
+  out = out.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '')
+  out = out.replace(/^`+|`+$/g, '')
+  return out.trim()
+}
+
+function splitSentences(text: string) {
+  return text
+    .replace(/\r\n/g, '\n')
+    .split(/(?<=[.!?])\s+/)
+    .map(s => s.trim())
+    .filter(Boolean)
+}
+
+function generateFlashcardsLocal(text: string, n: number) {
+  const sents = splitSentences(text)
+  const scored = sents.map(s => ({ s, score: Math.min(1, s.length / 200) + (/\b(is|are|was|has|have|include|includes|consists)\b/i.test(s) ? 0.5 : 0) }))
+    .sort((a, b) => b.score - a.score)
+  const cards: any[] = []
+  for (const item of scored) {
+    if (cards.length >= n) break
+    const sentence = item.s
+    const front = sentence.split(/[,;:\-]/)[0].split(' ').slice(0, 10).join(' ').trim()
+    const back = sentence
+    if (front && back) cards.push({ front: front + (front.endsWith('.') ? '' : '...'), back })
+  }
+  let i = 0
+  while (cards.length < n && i < sents.length) {
+    const sentence = sents[i++]
+    const front = sentence.split(' ').slice(0, 8).join(' ')
+    cards.push({ front: front + '...', back: sentence })
+  }
+  return cards.slice(0, n)
+}
+
+function generateQuizLocal(text: string, n: number) {
+  const sents = splitSentences(text)
+  const facts: string[] = []
+  const answers: string[] = []
+  for (const s of sents) {
+    const m = s.match(/^(.*?)\b(is|are|was|has|have|includes|consists of)\b\s*(.*?)(?:[.,;!?]|$)/i)
+    if (m) {
+      const subject = m[1].trim()
+      const answer = m[3].trim()
+      if (subject && answer && answer.length < 200) {
+        facts.push(s)
+        answers.push(answer)
+      }
+    }
+    if (facts.length >= n * 2) break
+  }
+
+  const questions: any[] = []
+  for (let i = 0; i < Math.min(n, facts.length); i++) {
+    const subjectMatch = facts[i].match(/^(.*?)\b(is|are|was|has|have|includes|consists of)\b/i)
+    const subject = subjectMatch ? subjectMatch[1].replace(/^The\s+/i, '').trim() : 'It'
+    const correct = answers[i]
+    const pool = answers.filter((_, idx) => idx !== i)
+    const distractors: string[] = []
+    while (distractors.length < 3 && pool.length > 0) {
+      const j = Math.floor(Math.random() * pool.length)
+      distractors.push(pool.splice(j, 1)[0])
+    }
+    while (distractors.length < 3) distractors.push('Unknown')
+    const options = [correct, ...distractors].slice(0, 4)
+    for (let k = options.length - 1; k > 0; k--) {
+      const r = Math.floor(Math.random() * (k + 1)); [options[k], options[r]] = [options[r], options[k]]
+    }
+    const correctIndex = options.indexOf(correct)
+    const qText = `What ${/\b(is|are|was|has|have|includes|consists of)\b/i.test(facts[i]) ? facts[i].replace(/\b(is|are|was|has|have|includes|consists of)\b.*/i, '').trim() : subject}?`
+    questions.push({ question: qText, options, answer: correct, correct: correctIndex })
+  }
+  return questions
+}
+
 function parseModelOutput(raw: any): string {
   if (raw == null) return ''
   if (typeof raw === 'string') return raw
@@ -107,7 +186,7 @@ function parseModelOutput(raw: any): string {
   return String(raw)
 }
 
-export async function summarizeText(text: string, options?: { forceGemini?: boolean }) {
+export async function summarizeText(text: string, options?: { forceGemini?: boolean; desiredWords?: number }) {
   const model = process.env.HF_SUMMARY_MODEL || process.env.HF_MODEL || 'facebook/bart-large-cnn'
   const fallback = process.env.HF_SUMMARY_FALLBACK || 'google/flan-t5-large'
   const clean = redactSensitive(text)
@@ -129,7 +208,12 @@ export async function summarizeText(text: string, options?: { forceGemini?: bool
     return output.trim()
   }
 
-  const instructionPrompt = `Summarize the following text in 3-5 concise sentences. Do not include links, emails, or promotional text. Output only the summary. Text:\n\n${clean}`
+  // If caller provided a desired word budget, use it in the instruction prompt.
+  // Otherwise fall back to short 3-5 sentence summaries for brevity.
+  const desiredWords = options?.desiredWords && Number.isFinite(options.desiredWords) ? options.desiredWords : undefined
+  const instructionPrompt = desiredWords
+    ? `Summarize the following text in about ${desiredWords} words. Do not include links, emails, or promotional text. Output only the summary. Text:\n\n${clean}`
+    : `Summarize the following text in 3-5 concise sentences. Do not include links, emails, or promotional text. Output only the summary. Text:\n\n${clean}`
 
   // Many classic summarization models expect the raw text as input (e.g., bart/pegasus).
   const isSummarizationModel = /bart|pegasus|summar/i.test(model)
@@ -140,10 +224,10 @@ export async function summarizeText(text: string, options?: { forceGemini?: bool
   const usedPrompt = isSummarizationModel ? undefined : instructionPrompt
 
   // If caller requests Gemini preference, try Gemini first
-  if (options?.forceGemini && process.env.GEMINI_API_KEY) {
+  if (options?.forceGemini && (process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY)) {
     try {
-      const gemOut = await generateWithGemini(DEFAULT_GEMINI_MODEL, instructionPrompt)
-      let summary = parseModelOutput(gemOut)
+      const gemOut = await summarizeDocumentWithGemini(text, desiredWords || 200, DEFAULT_GEMINI_MODEL)
+      let summary = String(gemOut || '')
       summary = stripEchoedPrompt(summary, usedPrompt)
       return summary
     } catch (gErr: any) {
@@ -163,10 +247,10 @@ export async function summarizeText(text: string, options?: { forceGemini?: bool
     } catch (errFallback: any) {
       console.warn('HF fallback also failed for summarization', errFallback?.message || errFallback)
       // As a last resort, use Gemini generative model if available
-      if (process.env.GEMINI_API_KEY) {
+      if (process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY) {
         try {
-          const gemOut = await generateWithGemini(DEFAULT_GEMINI_MODEL, instructionPrompt)
-          let summary = parseModelOutput(gemOut)
+          const gemOut = await summarizeDocumentWithGemini(text, desiredWords || 200, DEFAULT_GEMINI_MODEL)
+          let summary = String(gemOut || '')
           summary = stripEchoedPrompt(summary, usedPrompt)
           return summary
         } catch (gErr: any) {
@@ -196,7 +280,7 @@ Answer:`
   // Default behavior: allow Gemini fallback. If caller passes options.forceGemini, prefer Gemini first.
   // We'll accept an options object as a third parameter when calling this function.
   const callerOptions = options
-  if (callerOptions?.forceGemini && process.env.GEMINI_API_KEY) {
+  if (callerOptions?.forceGemini && (process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY)) {
     try {
       const out = await generateWithGemini(DEFAULT_GEMINI_MODEL, prompt)
       return parseModelOutput(out)
@@ -205,7 +289,7 @@ Answer:`
     }
   }
 
-  if (process.env.GEMINI_API_KEY) {
+  if (process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY) {
     try {
       const out = await generateWithGemini(DEFAULT_GEMINI_MODEL, prompt)
       return parseModelOutput(out)
@@ -242,20 +326,23 @@ export async function generateQuiz(text: string, count = 5, options?: { forceGem
     const prompt = `You are an intelligent quiz generator.\n\nAnalyze the following text and generate ${count} multiple-choice questions (MCQs).\nEach question should test the user's understanding of the text, not memorization.\nReturn the output in pure JSON format.\n\nRules:\n- Each question must have exactly 4 options.\n- Include the correct answer text in \"answer\".\n- Do NOT include explanations.\n\nText:\n\"\"\"${clean}\"\"\"\nFormat:\n[\n  {\n    \"question\": \"...\",\n    \"options\": [\"A\", \"B\", \"C\", \"D\"],\n    \"answer\": \"...\"\n  }\n]\n`;
 
     // If caller requests Gemini preference, try Gemini first
-    if (options?.forceGemini && process.env.GEMINI_API_KEY) {
+    if (options?.forceGemini && (process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY)) {
       try {
         const gemOut = await generateWithGemini(DEFAULT_GEMINI_MODEL, prompt)
-        try { return JSON.parse(gemOut) } catch { return gemOut }
+        try { return JSON.parse(unwrapCodeBlock(gemOut)) } catch { /* fallthrough */ }
+        // if not JSON, return cleaned text for downstream parsing
+        return unwrapCodeBlock(gemOut)
       } catch (gErr: any) {
         console.warn('Gemini preferred but failed for quiz', (gErr as any)?.message || String(gErr))
         // fall through to HF attempts below
       }
     }
 
-    if (process.env.GEMINI_API_KEY) {
+    if (process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY) {
       try {
         const geminiOut = await generateWithGemini(DEFAULT_GEMINI_MODEL, prompt)
-        try { return JSON.parse(geminiOut) } catch { return geminiOut }
+        try { return JSON.parse(unwrapCodeBlock(geminiOut)) } catch { /* fallthrough */ }
+        return unwrapCodeBlock(geminiOut)
       } catch (gErr: any) {
         console.warn('Gemini quiz generation failed', (gErr as any)?.message || String(gErr))
         // fall through to HF attempt
@@ -265,7 +352,19 @@ export async function generateQuiz(text: string, count = 5, options?: { forceGem
     // HF fallback path: try HF models
     const { out } = await tryModels(models, { inputs: prompt, parameters: { max_new_tokens: 700, temperature: 0.0 } })
     const parsed = parseModelOutput(out)
-    try { return JSON.parse(parsed) } catch { return parsed }
+    // Clean possible fenced blocks
+    const cleaned = unwrapCodeBlock(parsed)
+    try {
+      const maybe = JSON.parse(cleaned)
+      if (Array.isArray(maybe) && maybe.length >= count) return maybe
+      // if parsed JSON exists but too few items, fallback to local
+    } catch {}
+    // If parsing failed or insufficient, return a local fallback to guarantee count
+    try {
+      const maybeParsed = JSON.parse(cleaned)
+      if (Array.isArray(maybeParsed) && maybeParsed.length >= count) return maybeParsed
+    } catch {}
+    return generateQuizLocal(text, count)
 }
 
 export async function generateFlashcards(text: string, count = 10, options?: { forceGemini?: boolean }) {
@@ -273,118 +372,131 @@ export async function generateFlashcards(text: string, count = 10, options?: { f
   const defaultsF = [configuredF, 'google/flan-t5-large', 'sshleifer/distilbart-cnn-12-6', 'facebook/bart-large-cnn']
   const modelsF = defaultsF.filter(Boolean) as string[]
   const clean = redactSensitive(text)
-  const exampleF = `[START OF EXAMPLE]\nContext: The Moon is Earth's only natural satellite. It is the fifth largest satellite in the Solar System. The dark areas on its surface are called maria.\nFlashcards:\nFlashcard 1:\nFront: What is Earth's only natural satellite?\nBack: The Moon\nFlashcard 2:\nFront: What are the dark areas on the Moon's surface called?\nBack: Maria\n[END OF EXAMPLE]`
+  
+  const prompt = `You are creating concise study flashcards.
 
-  const prompt = `${exampleF}\n\n[START OF TASK]\nContext: ${clean}\n\nGenerate exactly ${count} flashcards in the same format.\n\nFlashcards:`
-  const payload = { inputs: prompt, parameters: { max_new_tokens: 700, temperature: 0.0 } }
+From the text below, generate ${count} flashcards.
+
+Format each flashcard EXACTLY as:
+
+Term: ...
+Definition: ...
+
+Rules:
+- Keep "Term" short (1–5 words).
+- Keep "Definition" to 1–3 sentences.
+- Focus on the most important concepts, entities, or ideas.
+- Avoid duplicates.
+- Do NOT number the flashcards.
+
+TEXT:
+${clean}`
 
   // If caller requested Gemini preference, try it first
-  if (options?.forceGemini && process.env.GEMINI_API_KEY) {
+  if (options?.forceGemini && (process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY)) {
     try {
-      const geminiOut = await generateWithGemini(process.env.GEMINI_MODEL || 'gemini-1.5-flash', prompt)
-      try { return JSON.parse(geminiOut) } catch {}
-      // if not JSON, try parsing front/back format
+      const geminiOut = await generateWithGemini(process.env.GEMINI_MODEL || 'gemini-2.5-flash', prompt)
+      // Parse Term/Definition format
       const parsedFromGem = ((): any => {
         const lines = geminiOut.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean)
-        const items: any[] = []
+        const items: string[] = []
         let i = 0
         while (i < lines.length) {
-          if (/^Flashcard\s*\d+/i.test(lines[i])) { i++ }
-          if (i < lines.length && /^Front:/i.test(lines[i])) {
-            const front = lines[i].replace(/^Front:\s*/i, '').trim(); i++
-            let back = ''
-            if (i < lines.length && /^Back:/i.test(lines[i])) { back = lines[i].replace(/^Back:\s*/i, '').trim(); i++ }
-            if (front) items.push({ question: front, answer: back })
+          if (/^Term:/i.test(lines[i])) {
+            const term = lines[i].replace(/^Term:\s*/i, '').trim(); i++
+            let definition = ''
+            if (i < lines.length && /^Definition:/i.test(lines[i])) { 
+              definition = lines[i].replace(/^Definition:\s*/i, '').trim(); i++ 
+            }
+            if (term) items.push(`${term}: ${definition}`)
             continue
           }
           i++
         }
-        return items.length ? items : null
+        return items
       })()
-      if (parsedFromGem) return parsedFromGem
+      if (parsedFromGem && parsedFromGem.length > 0) return parsedFromGem
+      // Fallback: return raw text as single item
+      return geminiOut ? [geminiOut] : []
     } catch (gErr: any) {
-      console.warn('Gemini preferred but failed for flashcards', gErr?.message || gErr)
-      // continue to HF path
+      console.warn('Gemini preferred but failed for flashcards', (gErr as any)?.message || String(gErr))
     }
   }
 
-  const { out: outF, model: modelF } = await tryModels(modelsF, payload)
-  const raw = parseModelOutput(outF)
-
-  try {
-    return JSON.parse(raw)
-  } catch (e) {
+  if (process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY) {
     try {
-      // Try parsing common front/back flashcard textual format before coercion
-      const parseFlashcardFormat = (rawText: string) => {
-        if (!rawText) return null
-        const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
-        const items: any[] = []
+      const geminiOut = await generateWithGemini(process.env.GEMINI_MODEL || 'gemini-2.5-flash', prompt)
+      // Parse Term/Definition format
+      const parsedFromGem = ((): any => {
+        const lines = geminiOut.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean)
+        const items: string[] = []
         let i = 0
         while (i < lines.length) {
-          const line = lines[i]
-          // look for 'Flashcard' marker or 'Front:' directly
-          if (/^Flashcard\s*\d+/i.test(line) || /^Front:/i.test(line)) {
-            // advance if Flashcard header
-            if (/^Flashcard\s*\d+/i.test(line)) { i++ }
-            // front
-            if (i < lines.length && /^Front:/i.test(lines[i])) {
-              const front = lines[i].replace(/^Front:\s*/i, '').trim(); i++
-              // back
-              let back = ''
-              if (i < lines.length && /^Back:/i.test(lines[i])) { back = lines[i].replace(/^Back:\s*/i, '').trim(); i++ }
-              if (front) items.push({ question: front, answer: back })
-              continue
+          if (/^Term:/i.test(lines[i])) {
+            const term = lines[i].replace(/^Term:\s*/i, '').trim(); i++
+            let definition = ''
+            if (i < lines.length && /^Definition:/i.test(lines[i])) { 
+              definition = lines[i].replace(/^Definition:\s*/i, '').trim(); i++ 
             }
+            if (term) items.push(`${term}: ${definition}`)
+            continue
           }
           i++
         }
-        return items.length ? items : null
-      }
-
-      const parsedFlash = parseFlashcardFormat(raw)
-      if (parsedFlash) return parsedFlash
-
-      const coerced = await coerceJson(modelF, raw)
-      return JSON.parse(coerced)
-    } catch (e2) {
-      if (process.env.GEMINI_API_KEY) {
-        try {
-          const geminiOut = await generateWithGemini('gemini-1.5-flash', prompt)
-          try { return JSON.parse(geminiOut) } catch {}
-
-          // try parsing Gemini front/back format
-          const parseFlashcardFormat = (rawText: string) => {
-            if (!rawText) return null
-            const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
-            const items: any[] = []
-            let i = 0
-            while (i < lines.length) {
-              const line = lines[i]
-              if (/^Flashcard\s*\d+/i.test(line)) { i++ }
-              if (i < lines.length && /^Front:/i.test(lines[i])) {
-                const front = lines[i].replace(/^Front:\s*/i, '').trim(); i++
-                let back = ''
-                if (i < lines.length && /^Back:/i.test(lines[i])) { back = lines[i].replace(/^Back:\s*/i, '').trim(); i++ }
-                if (front) items.push({ question: front, answer: back })
-                continue
-              }
-              i++
-            }
-            return items.length ? items : null
-          }
-
-          const parsed = parseFlashcardFormat(geminiOut)
-          if (parsed) return parsed
-          return geminiOut
-        } catch (gErr: any) {
-          console.warn('Gemini fallback failed', gErr?.message || gErr)
-          return raw
-        }
-      }
-      return raw
+        return items
+      })()
+      if (parsedFromGem && parsedFromGem.length > 0) return parsedFromGem
+      // Fallback: return raw text as single item
+      return geminiOut ? [geminiOut] : []
+    } catch (gErr: any) {
+      console.warn('Gemini flashcard generation failed', (gErr as any)?.message || String(gErr))
     }
   }
+
+  const payload = { inputs: prompt, parameters: { max_new_tokens: 700, temperature: 0.0 } }
+
+  const { out: outF, model: modelF } = await tryModels(modelsF, payload)
+  const raw = parseModelOutput(outF)
+  const cleaned = unwrapCodeBlock(raw)
+  // Try strict JSON
+  try {
+    const parsedJson = JSON.parse(cleaned)
+    if (Array.isArray(parsedJson) && parsedJson.length >= count) return parsedJson
+  } catch {}
+
+  // Try basic term/definition parse for flashcards
+  const parseTermDefinitionFormat = (rawText: string) => {
+    if (!rawText) return null
+    const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+    const items: string[] = []
+    let i = 0
+    while (i < lines.length) {
+      if (/^Term:/i.test(lines[i])) {
+        const term = lines[i].replace(/^Term:\s*/i, '').trim(); i++
+        let definition = ''
+        if (i < lines.length && /^Definition:/i.test(lines[i])) { 
+          definition = lines[i].replace(/^Definition:\s*/i, '').trim(); i++ 
+        }
+        if (term) items.push(`${term}: ${definition}`)
+        continue
+      }
+      i++
+    }
+    return items.length ? items : null
+  }
+
+  const parsedFlash = parseTermDefinitionFormat(cleaned)
+  if (parsedFlash && parsedFlash.length >= count) return parsedFlash
+
+  // Try coercion to JSON via HF helper
+  try {
+    const coerced = await coerceJson(modelF, cleaned)
+    const j = JSON.parse(coerced)
+    if (Array.isArray(j) && j.length >= count) return j
+  } catch {}
+
+  // If still not enough, attempt local generator to guarantee count
+  return generateFlashcardsLocal(text, count)
 }
 
 export default hfRequest

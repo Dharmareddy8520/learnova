@@ -1,4 +1,6 @@
 import express, { Request, Response } from 'express';
+import { PersonalCard } from '../models/PersonalCard';
+import { UploadedDocument } from '../models/UploadedDocument';
 
 const router = express.Router();
 
@@ -14,14 +16,52 @@ router.get('/', async (req: Request, res: Response) => {
     // Update consecutive days
     const consecutiveDays = await user.calculateConsecutiveDays();
     
+    // Get counts from both PersonalCard (legacy) and UploadedDocument (new) collections
+    const personalCardDocuments = await PersonalCard.countDocuments({
+      userId: user._id,
+      type: 'upload'
+    });
+    
+    const uploadedDocuments = await UploadedDocument.countDocuments({
+      userId: user._id
+    });
+    
+    const documentsCount = personalCardDocuments + uploadedDocuments;
+    
+    // Count documents with flashcards
+    const personalCardFlashcards = await PersonalCard.countDocuments({
+      userId: user._id,
+      type: 'flashcards'
+    });
+    
+    const uploadedDocumentFlashcards = await UploadedDocument.countDocuments({
+      userId: user._id,
+      flashcards: { $ne: null }
+    });
+    
+    const flashcardsStudied = personalCardFlashcards + uploadedDocumentFlashcards;
+    
+    // Count documents with quizzes
+    const personalCardQuizzes = await PersonalCard.countDocuments({
+      userId: user._id,
+      type: 'quiz'
+    });
+    
+    const uploadedDocumentQuizzes = await UploadedDocument.countDocuments({
+      userId: user._id,
+      quiz: { $ne: null }
+    });
+    
+    const quizzesCompleted = personalCardQuizzes + uploadedDocumentQuizzes;
+    
     res.json({
       recentDocs: [], // Will be implemented in later steps
       progressData: {
         consecutiveDays,
         totalDays: Math.floor((Date.now() - new Date(user.startedAt).getTime()) / (1000 * 60 * 60 * 24)),
-        documentsCount: 0,
-        flashcardsStudied: 0,
-        quizzesCompleted: 0
+        documentsCount,
+        flashcardsStudied,
+        quizzesCompleted
       },
       consecutiveDays,
       recommendations: [

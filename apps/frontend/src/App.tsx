@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import { GlobalUsageModal } from './components/GlobalUsageModal'
+import { FloatingQAChat } from './components/FloatingQAChat'
 import LandingPage from './pages/LandingPage'
 import SignupPage from './pages/SignupPage'
 import LoginPage from './pages/LoginPage'
@@ -14,12 +15,15 @@ import ProtectedRoute from './components/ProtectedRoute'
 import QAPage from './pages/QAPage'
 import FileSummarizerPage from './pages/FileSummarizerPage'
 import DocumentAnalyzerPage from './pages/DocumentAnalyzerPage'
+import MyPerformance from './pages/MyPerformance'
+import FolderView from './pages/FolderView'
 
 function App() {
   return (
     <AuthProvider>
       <div className="min-h-screen bg-gray-50">
         <GlobalUsageModal />
+        <FloatingQAChat />
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/signup" element={<SignupPage />} />
@@ -37,6 +41,22 @@ function App() {
             element={
               <ProtectedRoute>
                 <Dashboard />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/performance" 
+            element={
+              <ProtectedRoute>
+                <MyPerformance />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/folders/:folderId" 
+            element={
+              <ProtectedRoute>
+                <FolderView />
               </ProtectedRoute>
             } 
           />

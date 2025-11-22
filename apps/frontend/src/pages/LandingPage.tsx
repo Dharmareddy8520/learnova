@@ -14,11 +14,25 @@ const LandingPage = () => {
       navigate('/dashboard')
     }
   }, [user, isLoading, navigate])
+
   usePageMeta({
     title: 'Learnova — AI Q&A, Summaries & Flashcards',
     description: 'Transform text into interactive learning materials: instant summaries, smart flashcards, and AI Q&A.',
     url: window.location.origin + '/',
   })
+
+  // Show loading state while checking auth
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-primary-50 to-white flex items-center justify-center">
+        <div className="text-center">
+          <Brain className="h-12 w-12 text-primary-600 mx-auto mb-4 animate-pulse" />
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 to-white">
       {/* Navigation */}
@@ -56,21 +70,21 @@ const LandingPage = () => {
       {/* Hero Section */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
         <div className="text-center">
-          <h1 className="text-4xl md:text-6xl font-bold text-gray-900 mb-6">
+          <h1 className="text-4xl md:text-6xl font-bold text-gray-900 mb-6 animate-slideInDown">
             Your AI Personal
-            <span className="text-primary-600"> Knowledge Companion</span>
+            <span className="text-gradient"> Knowledge Companion</span>
           </h1>
-          <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
+          <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto animate-slideInUp" style={{animationDelay: '0.1s'}}>
             Transform any text or document into interactive learning materials. 
             Get instant summaries, generate flashcards, and master your knowledge with AI-powered insights.
           </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link to="/signup" className="btn btn-primary text-lg px-8 py-3">
+          <div className="flex flex-col sm:flex-row gap-4 justify-center animate-slideInUp" style={{animationDelay: '0.2s'}}>
+            <Link to="/signup" className="btn btn-primary text-lg px-8 py-3 hover-glow">
               Start Learning Free
               <ArrowRight className="ml-2 h-5 w-5" />
             </Link>
             <button
-              className="btn btn-outline text-lg px-8 py-3"
+              className="btn btn-outline text-lg px-8 py-3 hover-lift"
               onClick={async () => {
                 // Enter demo mode: clear any session and mark demo flag, then navigate to tools
                 try {
@@ -88,9 +102,9 @@ const LandingPage = () => {
       </div>
 
       {/* Features Section */}
-      <div className="bg-white py-20">
+      <div className="bg-gradient-primary py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
+          <div className="text-center mb-16 animate-slideInDown">
             <h2 className="text-3xl font-bold text-gray-900 mb-4">
               Everything you need to learn smarter
             </h2>
@@ -100,9 +114,9 @@ const LandingPage = () => {
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
-            <div className="text-center">
-              <div className="bg-primary-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                <Zap className="h-8 w-8 text-primary-600" />
+            <div className="card-interactive stagger-item">
+              <div className="bg-gradient-to-br from-blue-100 to-blue-200 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4 hover-scale">
+                <Zap className="h-8 w-8 text-blue-600" />
               </div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">
                 Instant Summaries
@@ -112,9 +126,9 @@ const LandingPage = () => {
               </p>
             </div>
 
-            <div className="text-center">
-              <div className="bg-primary-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                <BookOpen className="h-8 w-8 text-primary-600" />
+            <div className="card-interactive stagger-item">
+              <div className="bg-gradient-to-br from-green-100 to-green-200 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4 hover-scale">
+                <BookOpen className="h-8 w-8 text-green-600" />
               </div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">
                 Smart Flashcards
@@ -124,9 +138,9 @@ const LandingPage = () => {
               </p>
             </div>
 
-            <div className="text-center">
-              <div className="bg-primary-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                <Brain className="h-8 w-8 text-primary-600" />
+            <div className="card-interactive stagger-item">
+              <div className="bg-gradient-to-br from-purple-100 to-purple-200 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4 hover-scale">
+                <Brain className="h-8 w-8 text-purple-600" />
               </div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">
                 AI Q&A
@@ -136,9 +150,9 @@ const LandingPage = () => {
               </p>
             </div>
 
-            <div className="text-center">
-              <div className="bg-primary-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                <Shield className="h-8 w-8 text-primary-600" />
+            <div className="card-interactive stagger-item">
+              <div className="bg-gradient-to-br from-orange-100 to-orange-200 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4 hover-scale">
+                <Shield className="h-8 w-8 text-orange-600" />
               </div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">
                 Progress Tracking
@@ -150,15 +164,15 @@ const LandingPage = () => {
           </div>
 
             {/* Pricing Section */}
-            <div className="py-16 bg-gray-50">
+            <div className="py-16 bg-white mt-8 rounded-2xl">
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="text-center mb-8">
+                <div className="text-center mb-8 animate-slideInDown">
                   <h2 className="text-3xl font-bold text-gray-900 mb-2">Plans & Pricing</h2>
                   <p className="text-gray-600">Choose a plan that fits your learning needs — start free or upgrade for unlimited access.</p>
                 </div>
 
                 <div className="grid md:grid-cols-3 gap-6">
-                  <div className="rounded-2xl border border-gray-200 bg-white p-6 text-center">
+                  <div className="rounded-2xl border border-gray-200 bg-white p-6 text-center card-interactive stagger-item">
                     <div className="text-sm text-gray-500">Guest</div>
                     <div className="mt-2 text-2xl font-bold">Free</div>
                     <p className="mt-3 text-sm text-gray-600">Try basic features with limited daily usage.</p>

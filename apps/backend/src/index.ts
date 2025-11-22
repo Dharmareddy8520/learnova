@@ -5,6 +5,7 @@ dotenv.config();
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import session from 'express-session';
 import MongoStore from 'connect-mongo';
 import passport from 'passport';
@@ -18,8 +19,10 @@ import logRoutes from './routes/log';
 import billingRoutes, { stripeWebhookHandler } from './routes/billing';
 import usageRoutes from './routes/usage';
 import analyzeRoutes from './routes/analyze';
-import uploadRoutes from './routes/upload';
 import summaryRoutes from './routes/summary';
+import cardsRoutes from './routes/cards';
+import foldersRoutes from './routes/folders';
+import documentsRoutes from './routes/documents';
 import { isAuthenticated } from './middleware/auth';
 import challengeRoutes from './routes/challenge';
 
@@ -55,6 +58,7 @@ app.use(express.json({
   }
 }));
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
 // JSON parse error handler (body-parser)
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -128,10 +132,10 @@ app.use('/api/dashboard', isAuthenticated, dashboardRoutes);
 app.use('/api', mlRoutes);
 // In-memory file analyze endpoints (upload + analyze + status)
 app.use('/api', analyzeRoutes);
-// File upload endpoints
-app.use('/api', uploadRoutes);
 // Summary processing endpoints  
 app.use('/api', summaryRoutes);
+// Uploaded documents (with proper relationships)
+app.use('/api/documents', isAuthenticated, documentsRoutes);
 // Logging endpoints (public, dev helper)
 app.use('/api/log', logRoutes);
 // Billing routes (checkout + portal)
@@ -145,6 +149,12 @@ app.use('/api/usage', usageRoutes);
 
 // Challenge routes
 app.use('/api/challenge', challengeRoutes);
+
+// Personal cards endpoint
+app.use('/api/cards', isAuthenticated, cardsRoutes);
+
+// Folders endpoint
+app.use('/api/folders', isAuthenticated, foldersRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

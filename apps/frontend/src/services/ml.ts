@@ -4,8 +4,10 @@ import axios from 'axios'
 // frontend is hosted on a different origin. Can be overridden per-request.
 axios.defaults.withCredentials = true
 
-export async function summarize(text: string) {
-  const res = await axios.post('/api/summarize', { text })
+export async function summarize(text: string, desiredWords?: number) {
+  const payload: any = { text }
+  if (typeof desiredWords === 'number' && Number.isFinite(desiredWords) && desiredWords > 0) payload.desiredWords = Number(desiredWords)
+  const res = await axios.post('/api/summarize', payload)
   return res.data
 }
 
