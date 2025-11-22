@@ -10,6 +10,7 @@ import {
   generateAnswer,
 } from '../services/hf'
 import { User } from '../models/User'
+import { PersonalCard } from '../models/PersonalCard'
 
 dotenv.config()
 
@@ -38,6 +39,24 @@ function getUsedForUser(user: any, feature: string) {
   if (!user) return 0
   if (!user.usageDate || user.usageDate !== todayStr()) return 0
   return Number((user.usage && user.usage[feature]) || 0)
+}
+
+async function createPersonalCardIfNeeded(user: any, title: string, type: string, content: any, metadata: Record<string, any> = {}) {
+  try {
+    if (!user) {
+      console.debug('createPersonalCardIfNeeded: user is null/undefined')
+      return
+    }
+    if (!user._id) {
+      console.debug('createPersonalCardIfNeeded: user._id is missing', { user: user?.email || user?.name || 'unknown' })
+      return
+    }
+    const card = await PersonalCard.create({ userId: user._id, title, type, content, metadata })
+    console.debug('✅ Personal card created:', { id: card._id, type, title: title.slice(0, 40) })
+  } catch (e) {
+    // don't block main flow on persistence errors
+    console.error('❌ Failed to create personal card:', { error: (e as any)?.message || e, type, title: title.slice(0, 40) })
+  }
 }
 
 // ---- Status ---------------------------------------------------------------
@@ -345,6 +364,13 @@ router.post('/summarize', async (req: Request, res: Response) => {
   if (process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY) opts.forceGemini = true
   const summary = await summarizeText(text, opts)
 
+    // Persist to personal dashboard for logged-in users (best-effort)
+    try {
+      await createPersonalCardIfNeeded(freshUser, `Summary: ${String(text).slice(0, 60)}`, 'summary', { summary }, { desiredWords: opts.desiredWords || null })
+    } catch (e) {
+      console.debug('Personal card save (summary) failed:', (e as any)?.message || e)
+    }
+
     // increment usage for logged-in users
     if (freshUser && typeof freshUser.incrementUsage === 'function') {
       try {
@@ -456,9 +482,9 @@ router.post('/quiz/generate', async (req: Request, res: Response) => {
     const { text, numQuestions } = req.body as { text?: string; numQuestions?: number | string }
     const n = Number(numQuestions)
 
-    if (!text?.trim() || !Number.isFinite(n) || n <= 0 || n > 25) {
+    if (!text?.trim() || !Number.isFinite(n) || n < 0 || n > 50) {
       return res.status(400).json({
-        error: 'Missing/invalid text or number of questions (1–25)',
+        error: 'Missing/invalid text or number of questions (0–50)',
       })
     }
 
@@ -523,6 +549,8 @@ Quiz:`
           // increment for logged-in users
           // Normalize to point-only flashcards shape for frontend compatibility
           const norm = normalizeFlashcardItems(parsed, n)
+          // Save personal dashboard card (best-effort)
+          try { await createPersonalCardIfNeeded(freshUserQuiz || (req as any).user, `Quiz: ${String(text).slice(0,60)}`, 'quiz', { quiz: parsed }, { model: modelId }) } catch (e) { console.debug('Personal card save (quiz) failed:', (e as any)?.message || e) }
           if (freshUserQuiz && typeof freshUserQuiz.incrementUsage === 'function') {
             try {
               const r = await freshUserQuiz.incrementUsage('quiz')
@@ -538,6 +566,7 @@ Quiz:`
       // Try QA-style parser on cleaned text
       const parsedQA = parseQAFormat(cleaned)
       if (parsedQA && parsedQA.length >= n) {
+        try { await createPersonalCardIfNeeded(freshUserQuiz || (req as any).user, `Quiz: ${String(text).slice(0,60)}`, 'quiz', { quiz: parsedQA }, { model: modelId }) } catch (e) { console.debug('Personal card save (quiz) failed:', (e as any)?.message || e) }
         if (freshUserQuiz && typeof freshUserQuiz.incrementUsage === 'function') {
           try {
             const r = await freshUserQuiz.incrementUsage('quiz')
@@ -564,7 +593,8 @@ Quiz:`
           try { return JSON.parse(String(cleaned)) } catch { return null }
         })()
         if (Array.isArray(maybeParsed) && maybeParsed.length >= n) {
-          return res.json({ model: modelId, quiz: maybeParsed })
+        try { await createPersonalCardIfNeeded(freshUserQuiz || (req as any).user, `Quiz: ${String(text).slice(0,60)}`, 'quiz', { quiz: maybeParsed }, { model: modelId }) } catch (e) { console.debug('Personal card save (quiz) failed:', (e as any)?.message || e) }
+        return res.json({ model: modelId, quiz: maybeParsed })
         }
       } catch (e) {}
 
@@ -583,6 +613,7 @@ Quiz:`
     let hfQuiz = hfOut
     try { hfQuiz = typeof hfOut === 'string' ? (JSON.parse(hfOut) as any) : hfOut } catch { /* not JSON */ }
     if (Array.isArray(hfQuiz) && hfQuiz.length >= n) {
+      try { await createPersonalCardIfNeeded(user2 || (req as any).user, `Quiz: ${String(text).slice(0,60)}`, 'quiz', { quiz: hfQuiz }, { model: 'hf-fallback' }) } catch (e) { console.debug('Personal card save (quiz/hf) failed:', (e as any)?.message || e) }
       if (user2 && typeof user2.incrementUsage === 'function') {
         try { const r = await user2.incrementUsage('quiz'); return res.json({ model: 'hf-fallback', quiz: hfQuiz, usage: { feature: 'quiz', used: r.used, limit: getLimitForRole(user2.role) } }) } catch (e) { console.debug('Failed to increment usage after quiz (hf):', e) }
       }
@@ -591,8 +622,13 @@ Quiz:`
     // fallback local
     const localQ = generateQuizLocal(text, n)
     if (user2 && typeof user2.incrementUsage === 'function') {
-      try { const r = await user2.incrementUsage('quiz'); return res.json({ model: 'local-fallback', quiz: localQ, usage: { feature: 'quiz', used: r.used, limit: getLimitForRole(user2.role) } }) } catch (e) { console.debug('Failed to increment usage after quiz (local):', e) }
+      try {
+        await createPersonalCardIfNeeded(user2 || (req as any).user, `Quiz: ${String(text).slice(0,60)}`, 'quiz', { quiz: localQ }, { model: 'local-fallback' })
+        const r = await user2.incrementUsage('quiz');
+        return res.json({ model: 'local-fallback', quiz: localQ, usage: { feature: 'quiz', used: r.used, limit: getLimitForRole(user2.role) } })
+      } catch (e) { console.debug('Failed to increment usage after quiz (local):', e) }
     }
+    try { await createPersonalCardIfNeeded(user2 || (req as any).user, `Quiz: ${String(text).slice(0,60)}`, 'quiz', { quiz: localQ }, { model: 'local-fallback' }) } catch (e) { console.debug('Personal card save (quiz/local) failed:', (e as any)?.message || e) }
     return res.json({ model: 'local-fallback', quiz: localQ })
   } catch (e: any) {
     console.error('Quiz generation failed:', e)
@@ -605,10 +641,18 @@ router.post('/flashcards/generate', async (req: Request, res: Response) => {
   try {
     const { text, numFlashcards } = req.body as { text?: string; numFlashcards?: number | string }
     const n = Number(numFlashcards)
+    const sessionUserFC: any = (req as any).user
+    
+    console.log('📝 /flashcards/generate called:', {
+      textLength: text?.length || 0,
+      numFlashcards: n,
+      authenticated: !!sessionUserFC,
+      userId: sessionUserFC?._id?.toString?.() || 'guest'
+    })
 
-    if (!text?.trim() || !Number.isFinite(n) || n <= 0 || n > 50) {
+    if (!text?.trim() || !Number.isFinite(n) || n < 0 || n > 100) {
       return res.status(400).json({
-        error: 'Missing/invalid text or number of flashcards (1–50)',
+        error: 'Missing/invalid text or number of flashcards (0–100)',
       })
     }
 
@@ -635,10 +679,15 @@ Generate exactly ${n} flashcards in the same format.
 Flashcards:`
 
     // Usage enforcement (logged-in users) — reload user for authoritative counts
-    const sessionUserFC: any = (req as any).user
     let freshUserFC: any = null
     if (sessionUserFC) {
-      try { freshUserFC = await User.findById(sessionUserFC._id) } catch (e) { freshUserFC = null }
+      try { 
+        freshUserFC = await User.findById(sessionUserFC._id)
+        console.log('✅ Reloaded user from DB:', { userId: freshUserFC?._id?.toString?.() || 'not found', email: freshUserFC?.email })
+      } catch (e) { 
+        console.error('❌ Failed to reload user from DB:', (e as any)?.message)
+        freshUserFC = null 
+      }
       if (freshUserFC) {
         const limit = getLimitForRole(freshUserFC.role)
         if (limit >= 0) {
@@ -648,6 +697,8 @@ Flashcards:`
           }
         }
       }
+    } else {
+      console.log('⚠️  User not authenticated (guest mode)')
     }
 
     // Try Gemini first and coerce to structured JSON
@@ -660,6 +711,12 @@ Flashcards:`
         const parsed = JSON.parse(cleaned)
         if (Array.isArray(parsed) && parsed.length >= n) {
           const norm = normalizeFlashcardItems(parsed, n)
+          // persist personal card (best-effort) - pass freshUserFC if available
+          try { 
+            const userToSave = freshUserFC || sessionUserFC
+            console.log('📌 Saving flashcard, user:', { hasUser: !!userToSave, userId: userToSave?._id?.toString?.() })
+            await createPersonalCardIfNeeded(userToSave, `Flashcards: ${String(text).slice(0,60)}`, 'flashcards', { flashcards: norm }, { model: modelId }) 
+          } catch (e) { /* error already logged in createPersonalCardIfNeeded */ }
           if (freshUserFC && typeof freshUserFC.incrementUsage === 'function') {
             try {
               const r = await freshUserFC.incrementUsage('flashcards')
@@ -676,6 +733,7 @@ Flashcards:`
       const parsedCards = parseFlashcardFormat(cleaned)
       if (parsedCards && parsedCards.length >= n) {
         const norm = normalizeFlashcardItems(parsedCards, n)
+        try { await createPersonalCardIfNeeded(freshUserFC || (req as any).user, `Flashcards: ${String(text).slice(0,60)}`, 'flashcards', { flashcards: norm }, { model: modelId }) } catch (e) { console.debug('Personal card save (flashcards) failed:', (e as any)?.message || e) }
         if (freshUserFC && typeof freshUserFC.incrementUsage === 'function') {
           try {
             const r = await freshUserFC.incrementUsage('flashcards')
@@ -692,6 +750,7 @@ Flashcards:`
         const maybe = extractFlashcardsHeuristically(cleaned, n)
         if (maybe && maybe.length >= n) {
           const norm = normalizeFlashcardItems(maybe, n)
+          try { await createPersonalCardIfNeeded(freshUserFC || (req as any).user, `Flashcards: ${String(text).slice(0,60)}`, 'flashcards', { flashcards: norm }, { model: modelId + '-heuristic' }) } catch (e) { console.debug('Personal card save (flashcards/heuristic) failed:', (e as any)?.message || e) }
           if (freshUserFC && typeof freshUserFC.incrementUsage === 'function') {
             try { const r = await freshUserFC.incrementUsage('flashcards'); return res.json({ model: modelId + '-heuristic', flashcards: norm, usage: { feature: 'flashcards', used: r.used, limit: getLimitForRole(freshUserFC.role) } }) } catch (e) { console.debug('Failed to increment usage after flashcards (heuristic):', e) }
           }
@@ -700,6 +759,7 @@ Flashcards:`
         // Otherwise immediately fallback to local
         const localCards = generateFlashcardsLocal(text, n)
         const normLocal = normalizeFlashcardItems(localCards, n)
+        try { await createPersonalCardIfNeeded(freshUserFC || (req as any).user, `Flashcards: ${String(text).slice(0,60)}`, 'flashcards', { flashcards: normLocal }, { model: 'local-fallback' }) } catch (e) { console.debug('Personal card save (flashcards/local) failed:', (e as any)?.message || e) }
         if (freshUserFC && typeof freshUserFC.incrementUsage === 'function') {
           try { const r = await freshUserFC.incrementUsage('flashcards'); return res.json({ model: 'local-fallback', flashcards: normLocal, usage: { feature: 'flashcards', used: r.used, limit: getLimitForRole(freshUserFC.role) } }) } catch (e) { console.debug('Failed to increment usage after flashcards (local):', e) }
         }
@@ -710,6 +770,7 @@ Flashcards:`
       const heuristic = extractFlashcardsHeuristically(cleaned, n)
       if (heuristic && heuristic.length >= n) {
         const norm = normalizeFlashcardItems(heuristic, n)
+        try { await createPersonalCardIfNeeded(freshUserFC || (req as any).user, `Flashcards: ${String(text).slice(0,60)}`, 'flashcards', { flashcards: norm }, { model: modelId + '-heuristic' }) } catch (e) { console.debug('Personal card save (flashcards/heuristic2) failed:', (e as any)?.message || e) }
         if (freshUserFC && typeof freshUserFC.incrementUsage === 'function') {
           try { const r = await freshUserFC.incrementUsage('flashcards'); return res.json({ model: modelId + '-heuristic', flashcards: norm, usage: { feature: 'flashcards', used: r.used, limit: getLimitForRole(freshUserFC.role) } }) } catch (e) { console.debug('Failed to increment usage after flashcards (heuristic2):', e) }
         }
@@ -723,6 +784,7 @@ Flashcards:`
         })()
         if (Array.isArray(maybeParsed) && maybeParsed.length >= n) {
           const norm = normalizeFlashcardItems(maybeParsed, n)
+          try { await createPersonalCardIfNeeded(freshUserFC || (req as any).user, `Flashcards: ${String(text).slice(0,60)}`, 'flashcards', { flashcards: norm }, { model: modelId }) } catch (e) { console.debug('Personal card save (flashcards) failed:', (e as any)?.message || e) }
           return res.json({ model: modelId, flashcards: norm })
         }
       } catch (e) {}
@@ -730,6 +792,7 @@ Flashcards:`
       // If Gemini output insufficient or malformed, fallback to local generator
       const localCards = generateFlashcardsLocal(text, n)
       const normFinal = normalizeFlashcardItems(localCards, n)
+      try { await createPersonalCardIfNeeded(freshUserFC || (req as any).user, `Flashcards: ${String(text).slice(0,60)}`, 'flashcards', { flashcards: normFinal }, { model: 'local-fallback' }) } catch (e) { console.debug('Personal card save (flashcards/local) failed:', (e as any)?.message || e) }
       if (freshUserFC && typeof freshUserFC.incrementUsage === 'function') {
         try { const r = await freshUserFC.incrementUsage('flashcards'); return res.json({ model: 'local-fallback', flashcards: normFinal, usage: { feature: 'flashcards', used: r.used, limit: getLimitForRole(freshUserFC.role) } }) } catch (e) { console.debug('Failed to increment usage after flashcards (local):', e) }
       }
@@ -746,6 +809,7 @@ Flashcards:`
         try { hfCards = typeof hfOut === 'string' ? JSON.parse(hfOut) : hfOut } catch {}
         if (Array.isArray(hfCards) && hfCards.length >= n) {
           const norm = normalizeFlashcardItems(hfCards, n)
+          try { await createPersonalCardIfNeeded(freshUserFC || (req as any).user, `Flashcards: ${String(text).slice(0,60)}`, 'flashcards', { flashcards: norm }, { model: 'hf-fallback' }) } catch (e) { console.debug('Personal card save (flashcards/hf) failed:', (e as any)?.message || e) }
           return res.json({ model: 'hf-fallback', flashcards: norm, usage: { feature: 'flashcards', used: r.used, limit: getLimitForRole(freshUserFC.role) } })
         }
       } catch (e) {
@@ -754,7 +818,9 @@ Flashcards:`
     }
     // If HF output not sufficient or not array, fallback to local
     const localCards2 = generateFlashcardsLocal(text, n)
-    return res.json({ model: 'local-fallback', flashcards: localCards2 })
+    const normLocal2 = normalizeFlashcardItems(localCards2, n)
+    try { await createPersonalCardIfNeeded(freshUserFC || (req as any).user, `Flashcards: ${String(text).slice(0,60)}`, 'flashcards', { flashcards: normLocal2 }, { model: 'local-fallback' }) } catch (e) { console.debug('Personal card save (flashcards/hf-local) failed:', (e as any)?.message || e) }
+    return res.json({ model: 'local-fallback', flashcards: normalizeFlashcardItems(localCards2, n) })
   } catch (e: any) {
     console.error('Flashcard generation failed:', e)
     return res.status(500).json({ error: e?.message || 'Flashcard generation failed' })

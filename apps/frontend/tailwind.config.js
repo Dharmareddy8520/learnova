@@ -20,6 +20,25 @@ export default {
           900: '#1e3a8a',
         },
       },
+      keyframes: {
+        slideInUp: {
+          '0%': { transform: 'translateY(10px)', opacity: '0' },
+          '100%': { transform: 'translateY(0)', opacity: '1' },
+        },
+        fadeIn: {
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' },
+        },
+        'bounce-soft': {
+          '0%, 100%': { transform: 'translateX(0)' },
+          '50%': { transform: 'translateX(4px)' },
+        },
+      },
+      animation: {
+        slideInUp: 'slideInUp 0.3s ease-out',
+        fadeIn: 'fadeIn 0.5s ease-in-out',
+        'bounce-soft': 'bounce-soft 1s infinite',
+      },
     },
   },
   plugins: [],

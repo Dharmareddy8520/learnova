@@ -19,8 +19,10 @@ import logRoutes from './routes/log';
 import billingRoutes, { stripeWebhookHandler } from './routes/billing';
 import usageRoutes from './routes/usage';
 import analyzeRoutes from './routes/analyze';
-import uploadRoutes from './routes/upload';
 import summaryRoutes from './routes/summary';
+import cardsRoutes from './routes/cards';
+import foldersRoutes from './routes/folders';
+import documentsRoutes from './routes/documents';
 import { isAuthenticated } from './middleware/auth';
 
 const app = express();
@@ -129,10 +131,10 @@ app.use('/api/dashboard', isAuthenticated, dashboardRoutes);
 app.use('/api', mlRoutes);
 // In-memory file analyze endpoints (upload + analyze + status)
 app.use('/api', analyzeRoutes);
-// File upload endpoints
-app.use('/api', uploadRoutes);
 // Summary processing endpoints  
 app.use('/api', summaryRoutes);
+// Uploaded documents (with proper relationships)
+app.use('/api/documents', isAuthenticated, documentsRoutes);
 // Logging endpoints (public, dev helper)
 app.use('/api/log', logRoutes);
 // Billing routes (checkout + portal)
@@ -143,6 +145,12 @@ app.post('/api/billing/stripe-webhook', express.raw({ type: 'application/json' }
 
 // Usage meta endpoint
 app.use('/api/usage', usageRoutes);
+
+// Personal cards endpoint
+app.use('/api/cards', isAuthenticated, cardsRoutes);
+
+// Folders endpoint
+app.use('/api/folders', isAuthenticated, foldersRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

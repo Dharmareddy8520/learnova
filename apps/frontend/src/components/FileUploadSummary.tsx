@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { FileText, Clock, CheckCircle, AlertCircle, RotateCcw, Play, ChevronRight, ChevronLeft, Eye, MessageSquare, Copy, Check } from 'lucide-react';
+import { FileText, Clock, CheckCircle, AlertCircle, RotateCcw, Play, ChevronRight, ChevronLeft, Eye } from 'lucide-react';
 
 // Types for interactive components
 type Question = {
@@ -11,14 +11,6 @@ type Question = {
 
 // Flashcards are now simple important-point strings (no Q/A pairs)
 type Flashcard = string;
-
-type QAItem = {
-  question: string;
-  answer: string;
-  score?: number | null;
-  start?: number | null;
-  end?: number | null;
-};
 
 interface JobStatus {
   status: 'queued' | 'running' | 'done' | 'failed';
@@ -310,133 +302,6 @@ const FlashcardViewer: React.FC<{ cards: Flashcard[] }> = ({ cards }) => {
   );
 };
 
-// Interactive Q&A Component (based on QAPage.tsx)
-const QASection: React.FC<{ hasContent: boolean; context: string }> = ({ hasContent, context }) => {
-  const [question, setQuestion] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [history, setHistory] = useState<QAItem[]>([]);
-  const [copied, setCopied] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const ask = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    if (!question.trim()) {
-      setError('Please provide a question.');
-      return;
-    }
-    setLoading(true);
-    try {
-      // send context + question so backend can run extractive QA over the document
-      const response = await fetch('/api/qa', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ context: context || '', question })
-      });
-      const data = await response.json();
-      
-      const item: QAItem = {
-        question,
-        answer: data?.answer ?? '',
-        score: data?.score ?? null,
-        start: data?.start ?? null,
-        end: data?.end ?? null,
-      };
-      setHistory((h) => [item, ...h].slice(0, 12));
-      setQuestion('');
-    } catch (err: any) {
-      setError(err?.message || 'Q/A failed.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const copyText = async (text?: string) => {
-    if (!text) return;
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
-    } catch (e) {}
-  };
-
-  if (!hasContent) return null;
-
-  return (
-    <div className="space-y-3">
-      <h3 className="font-medium text-gray-900 flex items-center space-x-2">
-        <MessageSquare className="h-5 w-5 text-orange-600" />
-        <span>Ask Questions</span>
-      </h3>
-      <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg space-y-4">
-        <p className="text-gray-800">
-          Document analyzed and ready for questions. Ask anything about the content:
-        </p>
-        
-        <form onSubmit={ask} className="space-y-3">
-          <div className="flex space-x-2">
-            <input
-              type="text"
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              placeholder="Ask a question about the document..."
-              className="flex-1 px-3 py-2 border border-orange-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-              disabled={loading}
-            />
-            <button
-              type="submit"
-              disabled={!question.trim() || loading}
-              className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? 'Asking...' : 'Ask'}
-            </button>
-          </div>
-          
-          {error && (
-            <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-rose-800 text-sm">
-              {error}
-            </div>
-          )}
-        </form>
-        
-        {history.length > 0 && (
-          <div className="space-y-2 max-h-64 overflow-y-auto">
-            {history.map((h, i) => (
-              <div key={i} className="space-y-1">
-                <div className="bg-indigo-100 text-indigo-900 px-3 py-2 rounded-lg">
-                  <strong>Q:</strong> {h.question}
-                </div>
-                <div className="bg-white text-gray-900 px-3 py-2 rounded-lg border">
-                  <div className="mb-2">
-                    <strong>A:</strong> {h.answer}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {h.score == null ? (
-                      <div className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">Generated</div>
-                    ) : (
-                      <div className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded">
-                        Extracted • {(Number(h.score) * 100).toFixed(1)}%
-                      </div>
-                    )}
-                    <button 
-                      type="button" 
-                      onClick={() => copyText(h.answer)} 
-                      className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs ring-1 ring-gray-300 hover:bg-gray-50"
-                    >
-                      {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />} 
-                      Copy
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
 const FileUploadSummary: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
   const [inputMode, setInputMode] = useState<'file' | 'text'>('file');
@@ -444,12 +309,12 @@ const FileUploadSummary: React.FC = () => {
   const [jobStatus, setJobStatus] = useState<JobStatus | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [selectedTasks, setSelectedTasks] = useState<{
     summarize: boolean;
     quiz: boolean;
-    qa: boolean;
     flashcards: boolean;
-  }>({ summarize: true, quiz: false, qa: false, flashcards: false });
+  }>({ summarize: true, quiz: false, flashcards: false });
   const [desiredWords, setDesiredWords] = useState<string>('200');
   const [quizCount, setQuizCount] = useState<string>('8');
   const [flashcardCount, setFlashcardCount] = useState<string>('12');
@@ -545,6 +410,7 @@ const FileUploadSummary: React.FC = () => {
       const uploadResponse = await fetch('/api/upload', {
         method: 'POST',
         body: formData,
+        credentials: 'include',
       });
 
       if (!uploadResponse.ok) {
@@ -552,7 +418,14 @@ const FileUploadSummary: React.FC = () => {
       }
 
       const uploadData = await uploadResponse.json();
+      console.log('Upload response:', uploadData);
       const uploadId = uploadData.uploadId;
+      const fileName = uploadData.meta?.filename || 'Document';
+      
+      // Store the uploaded filename
+      console.log('Setting fileName state to:', fileName);
+      setUploadedFileName(fileName);
+      console.log(`✅ File uploaded: ${fileName}`);
 
       // Start analysis
       const analyzeResponse = await fetch('/api/analyze', {
@@ -562,6 +435,7 @@ const FileUploadSummary: React.FC = () => {
           uploadId,
           tasks: getTransformedTasks(),
         }),
+        credentials: 'include',
       });
 
       if (!analyzeResponse.ok) {
@@ -586,21 +460,20 @@ const FileUploadSummary: React.FC = () => {
     }
     if (selectedTasks.quiz) {
       const n = Number(quizCount);
-      transformedTasks.quiz = (Number.isFinite(n) && n > 0 && n <= 25) ? { numQuestions: n } : { numQuestions: 8 };
-    }
-    if (selectedTasks.qa) {
-      transformedTasks.qa = true;
+      transformedTasks.quiz = (Number.isFinite(n) && n > 0 && n <= 50) ? { numQuestions: n } : { numQuestions: 8 };
     }
     if (selectedTasks.flashcards) {
       const m = Number(flashcardCount);
-      transformedTasks.flashcards = (Number.isFinite(m) && m > 0 && m <= 50) ? { count: m } : { count: 12 };
+      transformedTasks.flashcards = (Number.isFinite(m) && m > 0 && m <= 100) ? { count: m } : { count: 12 };
     }
     return transformedTasks;
   };
 
   const pollJobStatus = useCallback(async (id: string) => {
     try {
-      const response = await fetch(`/api/analyze/${id}/status`);
+      const response = await fetch(`/api/analyze/${id}/status`, {
+        credentials: 'include',
+      });
       if (!response.ok) {
         throw new Error(`Status check failed: ${response.statusText}`);
       }
@@ -616,40 +489,18 @@ const FileUploadSummary: React.FC = () => {
     }
   }, []);
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'done':
-        return <CheckCircle className="h-5 w-5 text-green-600" />;
-      case 'failed':
-        return <AlertCircle className="h-5 w-5 text-red-600" />;
-      default:
-        return <Clock className="h-5 w-5 text-blue-600" />;
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'done':
-        return 'text-green-700 bg-green-50 border-green-200';
-      case 'failed':
-        return 'text-red-700 bg-red-50 border-red-200';
-      default:
-        return 'text-blue-700 bg-blue-50 border-blue-200';
-    }
-  };
-
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
-      <div className="text-center">
+      <div className="relative text-center animate-slideInDown">
         <h2 className="text-2xl font-bold text-gray-900 mb-2">Multi-Task AI Document Analyzer</h2>
         <p className="text-gray-600">Upload a document and choose which AI tasks to perform</p>
       </div>
 
       {/* Input Mode Toggle */}
-      <div className="flex justify-center gap-4 mb-4">
+      <div className="flex justify-center gap-4 mb-4 animate-slideInUp" style={{animationDelay: '0.1s'}}>
         <button
           type="button"
-          className={`px-4 py-2 rounded-lg font-medium border transition-colors ${inputMode === 'file' ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-blue-700 border-blue-300 hover:bg-blue-50'}`}
+          className={`px-4 py-2 rounded-lg font-medium border transition-all ${inputMode === 'file' ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white border-blue-700 shadow-lg' : 'bg-white text-blue-700 border-blue-300 hover:bg-blue-50 hover-lift'}`}
           onClick={() => {
             setInputMode('file');
             setTimeout(() => {
@@ -661,7 +512,7 @@ const FileUploadSummary: React.FC = () => {
         </button>
         <button
           type="button"
-          className={`px-4 py-2 rounded-lg font-medium border transition-colors ${inputMode === 'text' ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-blue-700 border-blue-300 hover:bg-blue-50'}`}
+          className={`px-4 py-2 rounded-lg font-medium border transition-all ${inputMode === 'text' ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white border-blue-700 shadow-lg' : 'bg-white text-blue-700 border-blue-300 hover:bg-blue-50 hover-lift'}`}
           onClick={() => setInputMode('text')}
         >
           Paste Text
@@ -680,9 +531,9 @@ const FileUploadSummary: React.FC = () => {
           />
         </>
       ) : (
-        <div className="border-2 border-dashed border-blue-300 rounded-lg p-6 bg-blue-50">
+        <div className="border-2 border-dashed border-blue-300 rounded-lg p-6 bg-blue-50 animate-scaleIn hover:border-blue-500 transition-colors">
           <textarea
-            className="w-full min-h-[120px] rounded-lg border border-blue-200 p-3 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            className="w-full min-h-[120px] rounded-lg border border-blue-200 p-3 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:outline-none focus:shadow-md"
             placeholder="Paste or type your document text here..."
             value={pastedText}
             onChange={e => setPastedText(e.target.value)}
@@ -731,13 +582,13 @@ const FileUploadSummary: React.FC = () => {
           <label className="text-sm text-gray-700">Quiz questions:</label>
           <input
             type="number"
-            min={1}
-            max={25}
+            min={0}
+            max={50}
             value={quizCount}
             onChange={(e) => setQuizCount(e.target.value)}
             className="w-32 px-3 py-2 border border-gray-200 rounded-md"
           />
-          <p className="text-sm text-gray-500">Number of multiple-choice questions (1–25).</p>
+          <p className="text-sm text-gray-500">Number of multiple-choice questions (0–50).</p>
         </div>
       )}
 
@@ -746,13 +597,13 @@ const FileUploadSummary: React.FC = () => {
           <label className="text-sm text-gray-700">Flashcards:</label>
           <input
             type="number"
-            min={1}
-            max={50}
+            min={0}
+            max={100}
             value={flashcardCount}
             onChange={(e) => setFlashcardCount(e.target.value)}
             className="w-32 px-3 py-2 border border-gray-200 rounded-md"
           />
-          <p className="text-sm text-gray-500">Number of flashcards to generate (1–50).</p>
+          <p className="text-sm text-gray-500">Number of flashcards to generate (0–100).</p>
         </div>
       )}
 
@@ -782,30 +633,196 @@ const FileUploadSummary: React.FC = () => {
         </div>
       )}
 
-      {/* Status Display */}
-      {jobStatus && (
+      {/* Uploaded Filename Display */}
+      {uploadedFileName && !jobStatus && (
+        <div className="p-4 border border-blue-200 bg-blue-50 rounded-lg">
+          <div className="flex items-center space-x-2 text-blue-900">
+            <FileText className="h-5 w-5" />
+            <span className="text-sm font-medium">📄 {uploadedFileName}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Interactive Loading UI - Show Results As They Complete */}
+      {jobStatus && jobStatus.status === 'running' && (
         <div className="space-y-6">
-          <div className={`p-4 border rounded-lg ${getStatusColor(jobStatus.status)}`}>
-            <div className="flex items-center space-x-2">
-              {getStatusIcon(jobStatus.status)}
-              <span className="font-medium capitalize">{jobStatus.status}</span>
+          {/* Status Header */}
+          <div className="p-6 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200">
+            <div className="flex items-center gap-4">
+              <div className="animate-spin">
+                <Clock className="h-6 w-6 text-blue-600" />
+              </div>
+              <div className="flex-1">
+                <h2 className="text-lg font-bold text-blue-900">Processing Your Document</h2>
+                <p className="text-sm text-blue-800">
+                  {uploadedFileName && (
+                    <>
+                      📄 {uploadedFileName} • 
+                    </>
+                  )}
+                  Generating summary, quiz, and flashcards...
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <div className="flex flex-col items-center">
+                  <span className="text-2xl">{jobStatus.results?.summary ? '✅' : '⏳'}</span>
+                  <span className="text-xs text-gray-700 font-medium mt-1">Summary</span>
+                </div>
+                <div className="flex flex-col items-center">
+                  <span className="text-2xl">{jobStatus.results?.quiz ? '✅' : '⏳'}</span>
+                  <span className="text-xs text-gray-700 font-medium mt-1">Quiz</span>
+                </div>
+                <div className="flex flex-col items-center">
+                  <span className="text-2xl">{jobStatus.results?.flashcards ? '✅' : '⏳'}</span>
+                  <span className="text-xs text-gray-700 font-medium mt-1">Flashcards</span>
+                </div>
+              </div>
             </div>
+            <div className="mt-4 w-full bg-blue-200 rounded-full h-2 overflow-hidden">
+              <div 
+                className="bg-blue-600 h-full animate-pulse rounded-full"
+                style={{ width: '100%' }}
+              ></div>
+            </div>
+            <p className="text-xs text-center text-blue-700 mt-2">This usually takes 10-30 seconds...</p>
           </div>
 
-          {jobStatus.status === 'done' && jobStatus.results && (
-            <div className="space-y-6">
-              {/* Summary Results */}
-              {jobStatus.results.summary && (
+          {/* Summary Results - Show immediately when available */}
+          {jobStatus.results?.summary && (
+            <div className="space-y-3">
+              <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                <CheckCircle className="h-5 w-5 text-green-600" />
+                <span>Summary</span>
+              </h3>
+              <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                <p className="text-gray-800 leading-relaxed">{jobStatus.results.summary}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Quiz - Interactive Mode During Loading */}
+          {jobStatus.results?.quiz && (() => {
+            const questions = normalizeQuiz(jobStatus.results.quiz);
+            
+            if (interactiveMode.quiz.active && interactiveMode.quiz.questions.length > 0) {
+              return (
                 <div className="space-y-3">
-                  <h3 className="font-medium text-gray-900 flex items-center space-x-2">
-                    <CheckCircle className="h-5 w-5 text-green-600" />
-                    <span>Summary</span>
-                  </h3>
-                  <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                    <p className="text-gray-800 leading-relaxed">{jobStatus.results.summary}</p>
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                      <Play className="h-5 w-5 text-purple-600" />
+                      <span>Interactive Quiz</span>
+                    </h3>
+                    <button
+                      onClick={resetInteractiveMode}
+                      className="text-sm text-gray-600 hover:text-gray-800 underline"
+                    >
+                      Exit Quiz
+                    </button>
                   </div>
+                  <QuizPlayer 
+                    questions={interactiveMode.quiz.questions} 
+                    onRestart={resetInteractiveMode}
+                  />
                 </div>
-              )}
+              );
+            }
+            
+            return questions.length > 0 ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                    <CheckCircle className="h-5 w-5 text-purple-600" />
+                    <span>Quiz Ready ({questions.length} questions)</span>
+                  </h3>
+                  <span className="text-xs text-gray-600">Still processing remaining tasks...</span>
+                </div>
+                <button
+                  onClick={startInteractiveQuiz}
+                  className="w-full px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition font-medium"
+                >
+                  Start Quiz Now While Processing
+                </button>
+              </div>
+            ) : null;
+          })()}
+
+          {/* Flashcards - Interactive Mode During Loading */}
+          {jobStatus.results?.flashcards && (() => {
+            const cards = normalizeFlashcards(jobStatus.results.flashcards);
+            
+            if (interactiveMode.flashcards.active && interactiveMode.flashcards.cards.length > 0) {
+              return (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                      <Play className="h-5 w-5 text-orange-600" />
+                      <span>Study Flashcards</span>
+                    </h3>
+                    <button
+                      onClick={resetInteractiveMode}
+                      className="text-sm text-gray-600 hover:text-gray-800 underline"
+                    >
+                      Exit Flashcards
+                    </button>
+                  </div>
+                  <FlashcardViewer cards={interactiveMode.flashcards.cards} />
+                </div>
+              );
+            }
+            
+            return cards.length > 0 ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                    <CheckCircle className="h-5 w-5 text-orange-600" />
+                    <span>Flashcards Ready ({cards.length} cards)</span>
+                  </h3>
+                  <span className="text-xs text-gray-600">Still processing remaining tasks...</span>
+                </div>
+                <button
+                  onClick={startInteractiveFlashcards}
+                  className="w-full px-4 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition font-medium"
+                >
+                  Study Flashcards Now While Processing
+                </button>
+              </div>
+            ) : null;
+          })()}
+        </div>
+      )}
+
+      {/* Results Display */}
+      {jobStatus && jobStatus.status === 'done' && jobStatus.results && (
+        <div className="space-y-6">
+          {/* Compact Status Indicators */}
+          <div className="flex justify-center gap-3 pb-2 border-b border-gray-200">
+            <div className="flex items-center gap-1">
+              <span className="text-sm">{jobStatus.results?.summary ? '✅' : '⏳'}</span>
+              <span className="text-xs text-gray-600">Summary</span>
+            </div>
+            <span className="text-gray-300">•</span>
+            <div className="flex items-center gap-1">
+              <span className="text-sm">{jobStatus.results?.quiz ? '✅' : '⏳'}</span>
+              <span className="text-xs text-gray-600">Quiz</span>
+            </div>
+            <span className="text-gray-300">•</span>
+            <div className="flex items-center gap-1">
+              <span className="text-sm">{jobStatus.results?.flashcards ? '✅' : '⏳'}</span>
+              <span className="text-xs text-gray-600">Flashcards</span>
+            </div>
+          </div>
+          {/* Summary Results */}
+          {jobStatus.results.summary && (
+            <div className="space-y-3">
+              <h3 className="font-medium text-gray-900 flex items-center space-x-2">
+                <CheckCircle className="h-5 w-5 text-green-600" />
+                <span>Summary</span>
+              </h3>
+              <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                <p className="text-gray-800 leading-relaxed">{jobStatus.results.summary}</p>
+              </div>
+            </div>
+          )}
               {/* If job finished but no summary, show any summary-specific errors for debugging */}
               {!jobStatus.results?.summary && jobStatus.errors?.summary && (
                 <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
@@ -933,37 +950,28 @@ const FileUploadSummary: React.FC = () => {
                 );
               })()}
 
-              {/* Q&A Section - Only show if Q&A was requested */}
-              {jobStatus.results.qa && (() => {
-                // Build a reasonable context for QA: prefer summary, otherwise join flashcards or quiz text
-                const ctx = jobStatus.results.summary
-                  || (Array.isArray(jobStatus.results.flashcards) ? jobStatus.results.flashcards.map((c: any) => {
-                      if (typeof c === 'string') return c;
-                      return String(c.front ?? c.question ?? c.back ?? c.answer ?? '').trim();
-                    }).join('\n') : '')
-                  || (Array.isArray(jobStatus.results.quiz) ? jobStatus.results.quiz.map((q: any) => q.question || '').join('\n') : '')
-                  || '';
-                return <QASection hasContent={Boolean(ctx)} context={ctx} />
-              })()}
-            </div>
-          )}
-
-          {jobStatus.status === 'failed' && jobStatus.errors && (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-              <h3 className="font-medium text-red-800 mb-2">Analysis Failed</h3>
-              <pre className="text-red-700 text-sm whitespace-pre-wrap">
-                {JSON.stringify(jobStatus.errors, null, 2)}
-              </pre>
-            </div>
-          )}
-              {/* Debug: raw job status (helpful when summary missing) */}
-              {!jobStatus.results?.summary && (
-                <details className="mt-4">
-                  <summary className="cursor-pointer text-sm text-gray-600">Show raw job status (debug)</summary>
-                  <pre className="text-xs mt-2 p-2 bg-gray-50 border rounded">{JSON.stringify(jobStatus, null, 2)}</pre>
-                </details>
-              )}
+              {/* Q&A moved to floating chat - no longer showing here */}
         </div>
+      )}
+
+      {/* Failed Status Display */}
+      {jobStatus && jobStatus.status === 'failed' && (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+          <h3 className="font-medium text-red-800 mb-2">Analysis Failed</h3>
+          {jobStatus.errors && (
+            <pre className="text-red-700 text-sm whitespace-pre-wrap">
+              {JSON.stringify(jobStatus.errors, null, 2)}
+            </pre>
+          )}
+        </div>
+      )}
+
+      {/* Debug: raw job status (helpful when summary missing) */}
+      {jobStatus && jobStatus.status === 'done' && !jobStatus.results?.summary && (
+        <details className="mt-4">
+          <summary className="cursor-pointer text-sm text-gray-600">Show raw job status (debug)</summary>
+          <pre className="text-xs mt-2 p-2 bg-gray-50 border rounded">{JSON.stringify(jobStatus, null, 2)}</pre>
+        </details>
       )}
 
       {/* Process Another File Button */}

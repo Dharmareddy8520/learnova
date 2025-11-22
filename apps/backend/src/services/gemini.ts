@@ -24,7 +24,8 @@ export async function generateWithGemini(
   const apiKeys = apiKeysRaw.split(',').map(k => k.trim()).filter(Boolean);
   if (!apiKeys.length) throw new Error('No Gemini API keys provided');
 
-  const maxAttempts = Number(process.env.GEMINI_MAX_RETRIES || 3);
+  // Optimize: reduce retries to save API quota. Only 1 attempt per key, no retries for transient errors
+  const maxAttempts = 1;
   const baseDelay = Number(process.env.GEMINI_RETRY_DELAY_MS || 1000);
 
   // Try each key in order, with retry/backoff for each

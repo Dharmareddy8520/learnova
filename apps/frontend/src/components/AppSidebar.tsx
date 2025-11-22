@@ -1,7 +1,7 @@
 // src/components/Sidebar.tsx
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { LogIn, LogOut, User as UserIcon } from "lucide-react";
+import { LogIn, LogOut, User as UserIcon, Lock } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { UsageOverview } from './UsageOverview'
 import axios from 'axios'
@@ -10,12 +10,9 @@ import { ShoppingCart } from 'lucide-react'
 type Item = { label: string; path: string };
 
 const items: Item[] = [
-  { label: "Summarization",      path: "/dashboard" },
-  { label: "Document Analyzer",  path: "/analyzer" },
-  { label: "Quiz Generation",    path: "/quiz-generator" },
-  { label: "Q&A Assistance",     path: "/qa" },
-  { label: "Flashcard Creation", path: "/flashcards" },
-  { label: "Profile",            path: "/account" },
+  { label: "My Library", path: "/dashboard" },
+  { label: "Document Analyzer", path: "/analyzer" },
+  { label: "My Performance", path: "/performance" },
 ];
 
 export default function Sidebar() {
@@ -52,6 +49,15 @@ export default function Sidebar() {
       navigate("/login");
     }
   };
+
+  // Filter items based on user role
+  const visibleItems = items.filter(it => {
+    // "My Library" only for premium users
+    if (it.path === "/dashboard" && user?.role !== 'premium') {
+      return false
+    }
+    return true
+  })
 
   return (
     <>
@@ -106,9 +112,28 @@ export default function Sidebar() {
         </div>
 
         <nav className="mt-2 space-y-1">
-          {items.map((it) => (
+          {visibleItems.map((it) => (
             <NavButton key={it.path} it={it} />
           ))}
+          
+          {/* Show "Unlock Features" for free users instead of "My Library" */}
+          {user && user.role !== 'premium' && (
+            <button
+              onClick={async () => {
+                try {
+                  const resp = await axios.post('/api/billing/create-checkout-session')
+                  const url = resp.data?.url
+                  if (url) window.location.href = url
+                } catch (e) {
+                  navigate('/account')
+                }
+              }}
+              className="w-full text-left rounded-md px-4 py-2 text-sm text-indigo-600 hover:bg-indigo-50 font-medium flex items-center gap-2"
+            >
+              <Lock className="h-4 w-4" />
+              Unlock My Library
+            </button>
+          )}
         </nav>
 
         {/* mobile usage overview */}
@@ -154,9 +179,28 @@ export default function Sidebar() {
         </div>
 
         <nav className="mt-2 space-y-1 px-2 overflow-y-auto">
-          {items.map((it) => (
+          {visibleItems.map((it) => (
             <NavButton key={it.path} it={it} />
           ))}
+          
+          {/* Show "Unlock Features" for free users instead of "My Library" */}
+          {user && user.role !== 'premium' && (
+            <button
+              onClick={async () => {
+                try {
+                  const resp = await axios.post('/api/billing/create-checkout-session')
+                  const url = resp.data?.url
+                  if (url) window.location.href = url
+                } catch (e) {
+                  navigate('/account')
+                }
+              }}
+              className="w-full text-left rounded-md px-4 py-2 text-sm text-indigo-600 hover:bg-indigo-50 font-medium flex items-center gap-2"
+            >
+              <Lock className="h-4 w-4" />
+              Unlock My Library
+            </button>
+          )}
         </nav>
 
         {/* desktop footer actions pinned to bottom */}
@@ -214,7 +258,7 @@ export default function Sidebar() {
 
       {/* === MOBILE BOTTOM TABS === */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-200">
-        <div className="grid grid-cols-5">
+        <div className="grid grid-cols-4">
           {items.map((it) => (
             <button
               key={it.path}
@@ -232,7 +276,7 @@ export default function Sidebar() {
               </span>
             </button>
           ))}
-          {/* extra tab slot becomes Login/Logout on mobile */}
+          {/* logout button on mobile */}
           {user ? (
             <button
               onClick={handleLogout}

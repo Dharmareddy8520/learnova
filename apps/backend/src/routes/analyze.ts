@@ -2,6 +2,8 @@ import express, { Request, Response } from 'express'
 import multer from 'multer'
 import { randomUUID } from 'crypto'
 import { summarizeText, generateAnswer, generateQuiz, generateFlashcards } from '../services/hf'
+import { PersonalCard } from '../models/PersonalCard'
+import { UploadedDocument, Summary, Quiz, Flashcard } from '../models/UploadedDocument'
 
 const router = express.Router()
 
@@ -36,6 +38,17 @@ function ensureGuestKey(req: Request, res: Response) {
     return k
   }
   return req.cookies.guestKey
+}
+
+// Helper to create personal cards from analysis results
+async function createPersonalCardIfNeeded(user: any, title: string, type: string, content: any, metadata: Record<string, any> = {}) {
+  try {
+    if (!user || !user._id) return
+    await PersonalCard.create({ userId: user._id, title, type, content, metadata })
+  } catch (e) {
+    // don't block main flow on persistence errors
+    console.debug('Failed to create personal card:', (e as any)?.message || e)
+  }
 }
 
 // POST /api/upload - accept file, return uploadId and meta
@@ -158,9 +171,13 @@ router.post('/analyze', express.json(), async (req: Request, res: Response) => {
     const jobId = randomUUID();
     jobsStore[jobId] = { id: jobId, uploadId: uploadId || null, meta: uploadMeta, status: 'pending', results: {}, errors: {}, createdAt: new Date().toISOString() };
 
+    // ⚠️ CRITICAL: Capture user BEFORE async job (before response is sent)
+    const user = (req as any).user;
+    console.log('📌 User captured at request start:', { hasUser: !!user, userId: user?._id?.toString?.() || 'none', userEmail: user?.email });
+
     // Kick off async work (best-effort, no persistent queue)
     ;(async () => {
-      console.log('🚀 Starting async job:', jobId);
+      console.log('🚀 Starting async job:', jobId, 'for user:', user?._id?.toString?.());
       jobsStore[jobId].status = 'running';
   // For pasted text, treat as a single chunk, not folder-like
   const isFolderLike = uploadMeta && (uploadMeta as any).ext === 'zip' || (uploadMeta as any).mime === 'application/zip';
@@ -186,49 +203,15 @@ router.post('/analyze', express.json(), async (req: Request, res: Response) => {
         })());
       }
 
-      if (tasks?.qa) {
-        tasksToRun.push((async () => {
-          try {
-            let qaItems: any[] = [];
-            if (tasks.qa.questions && Array.isArray(tasks.qa.questions) && tasks.qa.questions.length) {
-              for (const q of tasks.qa.questions.slice(0, 10)) {
-                try {
-                  const ans = await generateAnswer(q, fullText, { forceGemini: !!isFolderLike || forceGemini });
-                  qaItems.push({ question: q, answer: ans, confidence: null });
-                } catch (e: any) {
-                  qaItems.push({ question: q, answer: null, confidence: 0, error: e?.message || String(e) });
-                }
-              }
-            } else {
-              const rawQs: any = await generateQuiz(fullText, 3, { forceGemini: !!isFolderLike || forceGemini });
-              let parsed: any = rawQs;
-              if (typeof rawQs === 'string') {
-                try { parsed = JSON.parse(rawQs); } catch { parsed = null; }
-              }
-              if (Array.isArray(parsed)) {
-                for (const item of parsed) {
-                  const qText = item.question || item.prompt || JSON.stringify(item).slice(0, 200);
-                  const ans = await generateAnswer(qText, fullText).catch((e: any) => null);
-                  qaItems.push({ question: qText, answer: ans, confidence: null });
-                }
-              }
-            }
-            results.qa = qaItems;
-            usageStore[today][key].qa += 1;
-            usageStore[today][key].total += 1;
-          } catch (e: any) {
-            console.error('qa error', e);
-            errors.qa = e?.message || String(e);
-          }
-        })());
-      }
+      // NOTE: QA removed - it was making redundant API calls (generateQuiz + generateAnswer for each Q)
+      // Users can use the /api/qa endpoint directly for Q&A functionality
 
       if (tasks?.quiz) {
         tasksToRun.push((async () => {
           try {
             console.log('🎯 Quiz generation starting, text length:', fullText.length);
             const n = Number(tasks.quiz.numQuestions) || 8;
-            const q = await generateQuiz(fullText, Math.min(25, Math.max(1, n)), { forceGemini: !!isFolderLike || forceGemini });
+            const q = await generateQuiz(fullText, Math.min(50, Math.max(0, n)), { forceGemini: !!isFolderLike || forceGemini });
             console.log('✅ Quiz generated:', typeof q, Array.isArray(q) ? q.length + ' items' : (typeof q === 'string' ? q.length + ' chars' : 'unknown'));
             results.quiz = q;
             usageStore[today][key].quiz += 1;
@@ -245,7 +228,7 @@ router.post('/analyze', express.json(), async (req: Request, res: Response) => {
           try {
             console.log('📇 Flashcard generation starting, text length:', fullText.length);
             const n = Number(tasks.flashcards.count) || 12;
-            const fc = await generateFlashcards(fullText, Math.min(50, Math.max(1, n)), { forceGemini: !!isFolderLike || forceGemini });
+            const fc = await generateFlashcards(fullText, Math.min(100, Math.max(0, n)), { forceGemini: !!isFolderLike || forceGemini });
             console.log('✅ Flashcards generated:', typeof fc, Array.isArray(fc) ? fc.length + ' items' : (typeof fc === 'string' ? fc.length + ' chars' : 'unknown'));
             results.flashcards = fc;
             usageStore[today][key].flashcards += 1;
@@ -263,6 +246,97 @@ router.post('/analyze', express.json(), async (req: Request, res: Response) => {
       jobsStore[jobId].errors = errors;
       jobsStore[jobId].finishedAt = new Date().toISOString();
       console.log('✅ Job completed:', jobId, '- results keys:', Object.keys(results), '- errors keys:', Object.keys(errors));
+      console.log('📊 Results detail:', { 
+        hasSummary: !!results.summary, 
+        summaryLength: typeof results.summary === 'string' ? results.summary.length : 'N/A',
+        hasQuiz: !!results.quiz,
+        quizLength: Array.isArray(results.quiz) ? results.quiz.length : 'N/A',
+        hasFlashcards: !!results.flashcards,
+        flashcardsLength: Array.isArray(results.flashcards) ? results.flashcards.length : 'N/A'
+      });
+
+      // Create a single UploadedDocument with Summary, Quiz, and Flashcard references
+      if (user && user._id) {
+        try {
+          let summaryId: any = null;
+          let quizId: any = null;
+          let flashcardsId: any = null;
+
+          // Create Summary record - ONLY if we have content
+          if (results.summary && typeof results.summary === 'string' && results.summary.trim()) {
+            console.log('📝 Creating summary with content length:', results.summary.length);
+            const summaryDoc = await Summary.create({
+              content: results.summary.trim(),
+              wordCount: results.summary.split(/\s+/).filter((w: string) => w.length > 0).length,
+            });
+            summaryId = summaryDoc._id;
+            console.log('✅ Summary created:', summaryId);
+          } else {
+            console.log('⚠️ Skipping summary - no content or empty');
+          }
+
+          // Create Quiz record - ONLY if we have questions
+          if (Array.isArray(results.quiz) && results.quiz.length > 0) {
+            console.log('📋 Creating quiz with', results.quiz.length, 'questions');
+            const quizDoc = await Quiz.create({
+              questions: results.quiz.map((q: any) => ({
+                question: String(q.question || q.prompt || '').trim(),
+                options: Array.isArray(q.options) ? q.options : [],
+                answer: String(q.answer || '').trim(),
+                explanation: String(q.explanation || '').trim(),
+              })),
+            });
+            quizId = quizDoc._id;
+            console.log('✅ Quiz created:', quizId);
+          } else {
+            console.log('⚠️ Skipping quiz - no questions or empty');
+          }
+
+          // Create Flashcard record - ONLY if we have cards
+          if (Array.isArray(results.flashcards) && results.flashcards.length > 0) {
+            console.log('📇 Creating flashcards with', results.flashcards.length, 'cards');
+            const flashcardsDoc = await Flashcard.create({
+              cards: results.flashcards.map((fc: any) => {
+                // Handle both object and string formats
+                if (typeof fc === 'string') {
+                  // Parse "Term: Definition" format
+                  const [front, back] = fc.split(':').map((s: string) => s.trim());
+                  return { front: front || '', back: back || '' };
+                }
+                // Handle object format
+                return {
+                  front: String(fc.front || fc.question || fc.term || '').trim(),
+                  back: String(fc.back || fc.answer || fc.definition || '').trim(),
+                };
+              }).filter((card: any) => card.front || card.back), // Only keep non-empty cards
+            });
+            flashcardsId = flashcardsDoc._id;
+            console.log('✅ Flashcards created:', flashcardsId);
+          } else {
+            console.log('⚠️ Skipping flashcards - no cards or empty');
+          }
+
+          // Only create UploadedDocument if we have at least ONE result
+          if (summaryId || quizId || flashcardsId) {
+            const uploadedDoc = await UploadedDocument.create({
+              userId: user._id,
+              filename: uploadMeta?.filename || 'Uploaded Document',
+              originalText: fullText,
+              fileSize: uploadMeta?.size || 0,
+              fileType: uploadMeta?.ext || 'unknown',
+              summary: summaryId || undefined,
+              quiz: quizId || undefined,
+              flashcards: flashcardsId || undefined,
+            });
+
+            console.log('✅ UploadedDocument created:', uploadedDoc._id, 'with refs:', { summaryId, quizId, flashcardsId });
+          } else {
+            console.log('⚠️ Skipping UploadedDocument - no results generated');
+          }
+        } catch (e: any) {
+          console.error('Failed to create UploadedDocument:', (e as any)?.message || e);
+        }
+      }
     })();
 
     return res.json({ jobId });

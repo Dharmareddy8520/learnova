@@ -107,48 +107,52 @@ const MLTools: React.FC = () => {
   return (
     <div className="max-w-4xl mx-auto p-6">
       <h2 className="text-2xl font-bold mb-4">ML Tools</h2>
-      <textarea value={text} onChange={(e) => setText(e.target.value)} className="w-full p-3 border rounded mb-4 h-48" />
+      <textarea value={text} onChange={(e) => setText(e.target.value)} className="w-full p-3 border rounded-lg mb-4 h-48 input focus:shadow-lg animate-slideInUp" />
 
       {summaryWarning && (
-        <div className="mb-2 rounded-md border border-yellow-200 bg-yellow-50 px-3 py-2 text-sm text-yellow-800">
+        <div className="mb-2 rounded-md border border-yellow-200 bg-yellow-50 px-3 py-2 text-sm text-yellow-800 animate-slideInDown">
           {summaryWarning}
         </div>
       )}
 
-      <div className="flex gap-3 mb-4 items-center">
-        <div className="flex items-center gap-2">
+      <div className="flex gap-3 mb-4 items-center flex-wrap animate-slideInUp" style={{animationDelay: '0.1s'}}>
+        <div className="flex items-center gap-2 bg-white p-3 rounded-lg border border-gray-200 hover-lift">
           <button onClick={doSummarize} className="btn btn-primary" disabled={loading || !text}>Summarize</button>
           <label className="text-sm text-gray-600 ml-2">Words</label>
           <input type="number" value={summaryWords} min={20} max={2000} onChange={(e) => setSummaryWords(Number(e.target.value) || 200)} className="w-20 p-1 border rounded text-sm" />
           <span className="text-sm text-gray-600">{isUnlimited('summarize') ? '∞' : `${getUsed('summarize')}/${getLimit('summarize')} used`}</span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 bg-white p-3 rounded-lg border border-gray-200 hover-lift">
           <button onClick={doQuiz} className="btn btn-secondary" disabled={loading || !text}>Generate Quiz</button>
           <span className="text-sm text-gray-600">{isUnlimited('quiz') ? '∞' : `${getUsed('quiz')}/${getLimit('quiz')} used`}</span>
           <label className="text-sm">Count</label>
-          <input type="number" value={quizCount} min={1} max={20} onChange={(e) => setQuizCount(Number(e.target.value) || 1)} className="w-20 p-1 border rounded text-sm" />
+          <input type="number" value={quizCount} min={0} max={50} onChange={(e) => setQuizCount(Number(e.target.value) || 0)} className="w-20 p-1 border rounded text-sm" />
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 bg-white p-3 rounded-lg border border-gray-200 hover-lift">
           <button onClick={doFlashcards} className="btn btn-outline" disabled={loading || !text}>Flashcards</button>
           <span className="text-sm text-gray-600">{isUnlimited('flashcards') ? '∞' : `${getUsed('flashcards')}/${getLimit('flashcards')} used`}</span>
           <label className="text-sm">Count</label>
-          <input type="number" value={flashCount} min={1} max={50} onChange={(e) => setFlashCount(Number(e.target.value) || 1)} className="w-20 p-1 border rounded text-sm" />
+          <input type="number" value={flashCount} min={0} max={100} onChange={(e) => setFlashCount(Number(e.target.value) || 0)} className="w-20 p-1 border rounded text-sm" />
         </div>
       </div>
 
-      <div className="bg-white p-4 rounded shadow min-h-[6rem]">
-        {loading ? <div>Loading…</div> : (
+      <div className="bg-white p-4 rounded-lg shadow-md min-h-[6rem] animate-scaleIn">
+        {loading ? <div className="flex items-center justify-center h-24"><div className="animate-pulse-glow">Loading…</div></div> : (
           summary ? (
-            <div>
+            <div className="animate-slideInUp">
               <h3 className="font-semibold mb-2">Summary</h3>
               <div className="whitespace-pre-wrap">{summary}</div>
             </div>
           ) : quizResult ? (
-            Array.isArray(quizResult) ? <QuizView quiz={quizResult} /> : <pre>{JSON.stringify(quizResult, null, 2)}</pre>
+            <div className="animate-slideInUp">
+              {Array.isArray(quizResult) ? <QuizView quiz={quizResult} /> : <pre>{JSON.stringify(quizResult, null, 2)}</pre>}
+            </div>
           ) : cards ? (
-            Array.isArray(cards) ? <FlashcardsView cards={cards} /> : <pre>{JSON.stringify(cards, null, 2)}</pre>
+            <div className="animate-slideInUp">
+              {Array.isArray(cards) ? <FlashcardsView cards={cards} /> : <pre>{JSON.stringify(cards, null, 2)}</pre>}
+            </div>
           ) : (
             <div>No result yet</div>
           )
@@ -159,3 +163,4 @@ const MLTools: React.FC = () => {
 }
 
 export default MLTools
+
