@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import axios from 'axios'
 import { Trash2 } from 'lucide-react'
+import { FolderManager } from '../components/FolderManager'
 
 interface Folder {
   _id: string
@@ -202,20 +203,8 @@ export default function MyLibrary() {
           <div>
             {loadingContent ? (
               <p className="text-sm text-gray-500">Loading folders...</p>
-            ) : folders.length > 0 ? (
-              <div className="space-y-2">
-                {folders.map(f => (
-                  <div key={f._id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100">
-                    <div>
-                      <p className="text-sm font-medium">{f.name}</p>
-                      {f.description && <p className="text-xs text-gray-500">{f.description}</p>}
-                    </div>
-                    <span className="text-xs text-gray-600 bg-white px-2 py-1 rounded">{f.cardIds?.length || 0} cards</span>
-                  </div>
-                ))}
-              </div>
             ) : (
-              <p className="text-sm text-gray-600">No folders yet. Create one to organize your study materials.</p>
+              <FolderManager />
             )}
           </div>
         )}
