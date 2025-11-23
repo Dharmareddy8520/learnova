@@ -17,6 +17,7 @@ import FileSummarizerPage from './pages/FileSummarizerPage'
 import DocumentAnalyzerPage from './pages/DocumentAnalyzerPage'
 import MyPerformance from './pages/MyPerformance'
 import FolderView from './pages/FolderView'
+import MyLibrary from './pages/MyLibrary'
 
 function App() {
   return (
@@ -43,6 +44,14 @@ function App() {
                 <Dashboard />
               </ProtectedRoute>
             } 
+          />
+          <Route
+            path="/library"
+            element={
+              <ProtectedRoute>
+                <MyLibrary />
+              </ProtectedRoute>
+            }
           />
           <Route 
             path="/performance" 

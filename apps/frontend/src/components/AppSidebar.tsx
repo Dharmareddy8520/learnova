@@ -10,7 +10,7 @@ import { ShoppingCart } from 'lucide-react'
 type Item = { label: string; path: string };
 
 const items: Item[] = [
-  { label: "My Library", path: "/dashboard" },
+  { label: "My Library", path: "/library" },
   { label: "Document Analyzer", path: "/analyzer" },
   { label: "My Performance", path: "/performance" },
 ];
