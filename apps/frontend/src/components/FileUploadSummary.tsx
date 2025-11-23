@@ -26,13 +26,29 @@ interface JobStatus {
 // Normalization functions from the reference files
 function normalizeQuiz(raw: any): Question[] {
   if (Array.isArray(raw)) {
-    return raw.map((q: any, i: number) => ({
-      question: q.question || q.q || `Question ${i + 1}`,
-      options: q.options || q.choices || [],
-      answer: q.answer || '',
-      correct: typeof q.correct === 'number' ? q.correct : 
-               typeof q.answerIndex === 'number' ? q.answerIndex : 0,
-    })).filter(q => q.question && q.options.length >= 2);
+    return raw.map((q: any, i: number) => {
+      const options = q.options || q.choices || [];
+      // Determine correct index robustly: support numeric, letter (A/B/C), or answer string
+      let correct: number | undefined = undefined;
+      if (typeof q.correct === 'number') correct = q.correct;
+      else if (typeof q.answerIndex === 'number') correct = q.answerIndex;
+      else if (typeof q.answerIdx === 'number') correct = q.answerIdx;
+      else if (typeof q.correct === 'string' && /^[A-D]$/i.test(q.correct)) {
+        correct = 'ABCD'.indexOf(q.correct.toUpperCase());
+      } else if (typeof q.answer === 'string' && options.length) {
+        const idx = options.findIndex((opt: string) => String(opt).trim() === String(q.answer).trim());
+        if (idx >= 0) correct = idx;
+      }
+
+      if (correct == null) correct = 0;
+
+      return {
+        question: q.question || q.q || `Question ${i + 1}`,
+        options,
+        answer: q.answer || (options[correct] || ''),
+        correct,
+      };
+    }).filter(q => q.question && q.options.length >= 2);
   }
 
   if (typeof raw === 'string') {

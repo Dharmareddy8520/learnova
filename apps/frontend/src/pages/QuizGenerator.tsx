@@ -33,16 +33,24 @@ const ui = {
 /* ---------------------- quiz normalization helpers ---------------------- */
 function normalizeQuiz(raw: any): Question[] {
   if (Array.isArray(raw)) {
-    return raw.map((q: any, i: number) => ({
-      question: q.question || q.q || `Question ${i + 1}`,
-      choices: q.options || q.choices || [],
-      answerIndex:
-        typeof q.answerIndex === 'number'
-          ? q.answerIndex
-          : typeof q.answerIdx === 'number'
-          ? q.answerIdx
-          : 0,
-    }))
+    return raw.map((q: any, i: number) => {
+      const choices = q.options || q.choices || [];
+      let answerIndex: number | undefined = undefined;
+      if (typeof q.answerIndex === 'number') answerIndex = q.answerIndex;
+      else if (typeof q.answerIdx === 'number') answerIndex = q.answerIdx;
+      else if (typeof q.answer === 'string' && choices.length) {
+        const idx = choices.findIndex((c: string) => String(c).trim() === String(q.answer).trim());
+        if (idx >= 0) answerIndex = idx;
+      } else if (typeof q.correct === 'string' && /^[A-D]$/i.test(q.correct)) {
+        answerIndex = 'ABCD'.indexOf(q.correct.toUpperCase());
+      }
+      if (answerIndex == null) answerIndex = 0;
+      return {
+        question: q.question || q.q || `Question ${i + 1}`,
+        choices,
+        answerIndex,
+      };
+    })
   }
 
   if (typeof raw === 'string') {
