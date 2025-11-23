@@ -4,6 +4,103 @@ import { generateFlashcards, generateQuiz, summarizeText } from '../services/hf'
 
 const router = express.Router()
 
+// POST /api/documents - Create/save a new uploaded document with analysis results
+router.post('/', async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user
+    if (!user || !user._id) {
+      return res.status(401).json({ error: 'Unauthorized' })
+    }
+
+    const { filename, fileSize, fileType, originalText, summaryContent, quizQuestions, flashcardCards } = req.body as any
+
+    if (!filename || !originalText) {
+      return res.status(400).json({ error: 'filename and originalText are required' })
+    }
+
+    // Create document
+    const doc = await UploadedDocument.create({
+      userId: user._id,
+      filename,
+      fileSize: fileSize || originalText.length,
+      fileType: fileType || 'text/plain',
+      originalText,
+    })
+
+    // Optionally create and link summary if provided
+    if (summaryContent) {
+      const summary = await Summary.create({
+        content: summaryContent,
+        wordCount: summaryContent?.split(/\s+/).length || 0,
+      })
+      doc.summary = summary._id as any
+    }
+
+    // Optionally create and link quiz if provided
+    if (Array.isArray(quizQuestions) && quizQuestions.length > 0) {
+      const quiz = await Quiz.create({
+        questions: quizQuestions,
+      })
+      doc.quiz = quiz._id as any
+    }
+
+    // Optionally create and link flashcards if provided
+    if (Array.isArray(flashcardCards) && flashcardCards.length > 0) {
+      // Normalize flashcards format
+      const normalizedCards = flashcardCards.map((fc: any) => {
+        if (typeof fc === 'string') {
+          const [front, back] = fc.split(':').map((s: string) => s.trim())
+          return { front: front || '', back: back || '' }
+        }
+        return {
+          front: String(fc.front || fc.question || fc.term || '').trim(),
+          back: String(fc.back || fc.answer || fc.definition || '').trim(),
+        }
+      }).filter((card: any) => card.front || card.back)
+
+      const flashcards = await Flashcard.create({
+        cards: normalizedCards,
+      })
+      doc.flashcards = flashcards._id as any
+    }
+
+    await doc.save()
+
+    // Return in PersonalCard-compatible format for frontend consistency
+    const summary = doc.summary as unknown as ISummary | null
+    const quiz = doc.quiz as unknown as IQuiz | null
+    const flashcards = doc.flashcards as unknown as IFlashcard | null
+
+    const card = {
+      _id: doc._id,
+      title: doc.filename,
+      type: 'upload',
+      content: {
+        summary: summary?.content || '',
+        quiz: quiz?.questions || [],
+        flashcards: flashcards?.cards || [],
+        originalText: doc.originalText,
+      },
+      metadata: {
+        fileSize: doc.fileSize,
+        fileType: doc.fileType,
+        summaryId: summary?._id,
+        quizId: quiz?._id,
+        flashcardsId: flashcards?._id,
+        summaryLength: summary?.wordCount || summary?.content?.split(/\s+/).filter((w: string) => w.length > 0).length || 0,
+        quizCount: quiz?.questions?.length || 0,
+        flashcardCount: flashcards?.cards?.length || 0,
+      },
+      createdAt: doc.createdAt,
+    }
+
+    res.status(201).json({ document: card, message: 'Document saved to library successfully' })
+  } catch (error: any) {
+    console.error('❌ Failed to create document:', error)
+    res.status(500).json({ error: error?.message || 'Failed to save document' })
+  }
+})
+
 // GET /api/documents - Get all uploaded documents for the user
 router.get('/', async (req: Request, res: Response) => {
   try {
@@ -59,6 +156,20 @@ router.get('/', async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('❌ Failed to fetch documents:', error)
     res.status(500).json({ error: 'Failed to fetch documents' })
+  }
+})
+
+// GET /api/documents/count - Get count of uploaded documents for authenticated user
+router.get('/count', async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user
+    if (!user || !user._id) return res.status(401).json({ error: 'Unauthorized' })
+
+    const count = await UploadedDocument.countDocuments({ userId: user._id })
+    res.json({ count })
+  } catch (error: any) {
+    console.error('❌ Failed to fetch documents count:', error)
+    res.status(500).json({ error: 'Failed to fetch documents count' })
   }
 })
 

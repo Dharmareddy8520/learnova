@@ -19,6 +19,7 @@ interface JobStatus {
     quiz?: any;
     qa?: any;
     flashcards?: any;
+    originalText?: string;
   };
   errors?: any;
 }
@@ -328,6 +329,9 @@ const FileUploadSummary: React.FC = () => {
     flashcards: { active: false, cards: [] }
   });
 
+  const [isSavingToLibrary, setIsSavingToLibrary] = useState(false);
+  const [savedToLibrary, setSavedToLibrary] = useState(false);
+
   const startInteractiveQuiz = () => {
     if (!jobStatus?.results?.quiz) return;
     const questions = normalizeQuiz(jobStatus.results.quiz);
@@ -355,6 +359,55 @@ const FileUploadSummary: React.FC = () => {
       quiz: { active: false, questions: [] },
       flashcards: { active: false, cards: [] }
     });
+  };
+
+  const saveToLibrary = async () => {
+    if (!jobStatus?.results) return;
+    
+    setIsSavingToLibrary(true);
+    try {
+      const payload: any = {
+        filename: uploadedFileName || 'Untitled Document',
+        fileSize: file?.size || 0,
+        fileType: file?.type || 'text/plain',
+        originalText: jobStatus.results.originalText || '',
+      };
+
+      if (jobStatus.results.summary) {
+        payload.summaryContent = jobStatus.results.summary;
+      }
+
+      if (jobStatus.results.quiz) {
+        payload.quizQuestions = Array.isArray(jobStatus.results.quiz) 
+          ? jobStatus.results.quiz 
+          : [jobStatus.results.quiz];
+      }
+
+      if (jobStatus.results.flashcards) {
+        payload.flashcardCards = Array.isArray(jobStatus.results.flashcards)
+          ? jobStatus.results.flashcards
+          : [jobStatus.results.flashcards];
+      }
+
+      const response = await fetch('/api/documents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Failed to save to library');
+      }
+
+      setSavedToLibrary(true);
+      // Clear saved status after 3 seconds
+      setTimeout(() => setSavedToLibrary(false), 3000);
+    } catch (err: any) {
+      setError(err.message || 'Failed to save to library');
+    } finally {
+      setIsSavingToLibrary(false);
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -976,15 +1029,40 @@ const FileUploadSummary: React.FC = () => {
 
       {/* Process Another File Button */}
       {jobStatus?.status === 'done' && (
-        <div className="text-center">
+        <div className="flex flex-col gap-3">
+          {/* Save to Library Button */}
+          <button
+            onClick={saveToLibrary}
+            disabled={isSavingToLibrary || savedToLibrary}
+            className={`inline-flex items-center justify-center space-x-2 px-6 py-3 rounded-lg transition-colors w-full font-medium ${
+              savedToLibrary 
+                ? 'bg-green-600 text-white hover:bg-green-700' 
+                : 'bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50'
+            }`}
+          >
+            {savedToLibrary ? (
+              <>
+                <CheckCircle className="h-5 w-5" />
+                <span>Saved to Library!</span>
+              </>
+            ) : (
+              <>
+                <FileText className="h-5 w-5" />
+                <span>{isSavingToLibrary ? 'Saving...' : 'Save to My Library'}</span>
+              </>
+            )}
+          </button>
+
+          {/* Process Another File Button */}
           <button
             onClick={() => {
               setFile(null);
               setJobStatus(null);
               setError(null);
               resetInteractiveMode();
+              setSavedToLibrary(false);
             }}
-            className="inline-flex items-center space-x-2 px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+            className="inline-flex items-center justify-center space-x-2 px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium"
           >
             <RotateCcw className="h-5 w-5" />
             <span>Process Another File</span>
