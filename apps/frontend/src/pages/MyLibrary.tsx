@@ -109,6 +109,17 @@ export default function MyLibrary() {
     }
   }
 
+  const handleMoveCardToFolder = async (cardId: string, folderId: string) => {
+    try {
+      await axios.post(`/api/folders/${folderId}/add-card`, { cardId })
+      // Refresh folders to show updated card counts
+      const res = await axios.get('/api/folders')
+      setFolders(res.data.folders || [])
+    } catch (err: any) {
+      alert('Failed to move card: ' + (err.response?.data?.error || err.message))
+    }
+  }
+
   return (
     <div className="max-w-4xl mx-auto py-8">
       <div className="flex items-center justify-between mb-6">
@@ -216,18 +227,43 @@ export default function MyLibrary() {
             ) : cards.length > 0 ? (
               <div className="space-y-2">
                 {cards.map(c => (
-                  <div key={c._id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100">
-                    <div className="flex-1">
-                      <p className="text-sm font-medium">{c.title}</p>
+                  <div key={c._id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 group">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{c.title}</p>
                       <p className="text-xs text-gray-500">Quiz: {c.metadata?.quizCount || 0} | Flashcards: {c.metadata?.flashcardCount || 0}</p>
                     </div>
-                    <button
-                      onClick={() => handleDeleteCard(c._id)}
-                      className="ml-2 p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
-                      title="Delete card"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+                      {/* Move to Folder Button */}
+                      {folders.length > 0 && (
+                        <div className="relative group/dropdown">
+                          <button
+                            className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition"
+                            title="Move to folder"
+                          >
+                            📁
+                          </button>
+                          <div className="absolute right-0 mt-1 hidden group-hover/dropdown:block bg-white border border-gray-200 rounded-lg shadow-lg z-10 min-w-max">
+                            {folders.map(f => (
+                              <button
+                                key={f._id}
+                                onClick={() => handleMoveCardToFolder(c._id, f._id)}
+                                className="block w-full text-left px-3 py-2 text-sm hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg"
+                              >
+                                {f.name}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {/* Delete Button */}
+                      <button
+                        onClick={() => handleDeleteCard(c._id)}
+                        className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition"
+                        title="Delete card"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
