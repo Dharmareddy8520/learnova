@@ -281,19 +281,32 @@ export default function MyLibrary() {
               <div className="space-y-2">
                 {documents.map(d => (
                   <div key={d._id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100">
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{d.title}</p>
                       <p className="text-xs text-gray-500">
-                        Summary: {d.metadata?.summaryLength || 0} words | Quiz: {d.metadata?.quizCount || 0}
+                        Summary: {d.metadata?.summaryLength || 0} words | Quiz: {d.metadata?.quizCount || 0} | Flashcards: {d.metadata?.flashcardCount || 0}
                       </p>
                     </div>
-                    <button
-                      onClick={() => handleDeleteDocument(d._id)}
-                      className="ml-2 p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
-                      title="Delete document"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+                      {/* View/Study Actions - can add links to view document details later */}
+                      <button
+                        onClick={() => {
+                          // Placeholder for future: open document viewer modal
+                          alert('Document viewer coming soon!')
+                        }}
+                        className="px-2 py-1 text-xs rounded bg-blue-50 text-blue-700 hover:bg-blue-100 transition"
+                      >
+                        View
+                      </button>
+                      {/* Delete Button */}
+                      <button
+                        onClick={() => handleDeleteDocument(d._id)}
+                        className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition"
+                        title="Delete document"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
