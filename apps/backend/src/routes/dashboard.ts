@@ -1,6 +1,6 @@
 import express, { Request, Response } from 'express';
 import SavedContent from '../models/SavedContent';
-import UsageEvent from '../models/UsageEvent';
+import { UsageEvent } from '../models/UsageEvent';
 
 const router = express.Router();
 
