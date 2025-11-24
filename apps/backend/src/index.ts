@@ -5,6 +5,7 @@ dotenv.config();
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import session from 'express-session';
 import MongoStore from 'connect-mongo';
 import passport from 'passport';
@@ -55,6 +56,7 @@ app.use(express.json({
   }
 }));
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
 // JSON parse error handler (body-parser)
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

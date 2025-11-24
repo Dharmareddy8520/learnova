@@ -535,7 +535,11 @@ const FileUploadSummary: React.FC = () => {
       });
 
       if (!uploadResponse.ok) {
-        throw new Error(`Upload failed: ${uploadResponse.statusText}`);
+        // Try to read JSON error body for better UX
+        let errBody: any = null;
+        try { errBody = await uploadResponse.json(); } catch (e) { /* ignore parse errors */ }
+        const msg = errBody?.error || errBody?.message || uploadResponse.statusText;
+        throw new Error(`Upload failed: ${msg}`);
       }
 
       const uploadData = await uploadResponse.json();
@@ -567,7 +571,10 @@ const FileUploadSummary: React.FC = () => {
       });
 
       if (!analyzeResponse.ok) {
-        throw new Error(`Analysis failed: ${analyzeResponse.statusText}`);
+        let errBody: any = null;
+        try { errBody = await analyzeResponse.json(); } catch (e) { }
+        const msg = errBody?.error || errBody?.message || analyzeResponse.statusText;
+        throw new Error(`Analysis failed: ${msg}`);
       }
 
       const analyzeData = await analyzeResponse.json();
@@ -585,7 +592,10 @@ const FileUploadSummary: React.FC = () => {
     try {
       const response = await fetch(`/api/analyze/${id}/status`);
       if (!response.ok) {
-        throw new Error(`Status check failed: ${response.statusText}`);
+        let errBody: any = null;
+        try { errBody = await response.json(); } catch (e) { }
+        const msg = errBody?.error || errBody?.message || response.statusText;
+        throw new Error(`Status check failed: ${msg}`);
       }
 
       const data = await response.json();
@@ -635,12 +645,12 @@ const FileUploadSummary: React.FC = () => {
           <p className="text-lg font-medium text-gray-900">
             {file ? file.name : 'Choose a file to upload'}
           </p>
-          <p className="text-gray-500">PDF, DOC, DOCX, TXT files supported</p>
+          <p className="text-gray-500">PDF, DOCX, TXT files supported</p>
         </div>
         <input
           type="file"
           onChange={handleFileChange}
-          accept=".pdf,.doc,.docx,.txt"
+          accept=".pdf,.docx,.txt"
           className="mt-4"
         />
       </div>
@@ -708,6 +718,20 @@ const FileUploadSummary: React.FC = () => {
                   </div>
                 </div>
               )}
+              
+              {/* Summary Error */}
+              {!jobStatus.results.summary && jobStatus.errors?.summary && (
+                <div className="space-y-3">
+                  <h3 className="font-medium text-gray-900 flex items-center space-x-2">
+                    <AlertCircle className="h-5 w-5 text-red-600" />
+                    <span>Summary Failed</span>
+                  </h3>
+                  <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                    <p className="text-red-800 font-medium mb-2">Error generating summary:</p>
+                    <p className="text-red-700">{jobStatus.errors.summary}</p>
+                  </div>
+                </div>
+              )}
 
               {/* Quiz Results - Interactive Mode */}
               {jobStatus.results.quiz && (() => {
@@ -769,6 +793,20 @@ const FileUploadSummary: React.FC = () => {
                   </div>
                 );
               })()}
+              
+              {/* Quiz Error */}
+              {!jobStatus.results.quiz && jobStatus.errors?.quiz && (
+                <div className="space-y-3">
+                  <h3 className="font-medium text-gray-900 flex items-center space-x-2">
+                    <AlertCircle className="h-5 w-5 text-red-600" />
+                    <span>Quiz Generation Failed</span>
+                  </h3>
+                  <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                    <p className="text-red-800 font-medium mb-2">Error generating quiz:</p>
+                    <p className="text-red-700">{jobStatus.errors.quiz}</p>
+                  </div>
+                </div>
+              )}
 
               {/* Flashcards Results - Interactive Mode */}
               {jobStatus.results.flashcards && (() => {
@@ -827,10 +865,38 @@ const FileUploadSummary: React.FC = () => {
                   </div>
                 );
               })()}
+              
+              {/* Flashcards Error */}
+              {!jobStatus.results.flashcards && jobStatus.errors?.flashcards && (
+                <div className="space-y-3">
+                  <h3 className="font-medium text-gray-900 flex items-center space-x-2">
+                    <AlertCircle className="h-5 w-5 text-red-600" />
+                    <span>Flashcards Generation Failed</span>
+                  </h3>
+                  <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                    <p className="text-red-800 font-medium mb-2">Error generating flashcards:</p>
+                    <p className="text-red-700">{jobStatus.errors.flashcards}</p>
+                  </div>
+                </div>
+              )}
 
               {/* Q&A Section - Only show if Q&A was requested */}
               {jobStatus.results.qa && (
                 <QASection hasContent={Boolean(jobStatus.results.summary || jobStatus.results.quiz || jobStatus.results.flashcards)} />
+              )}
+              
+              {/* Q&A Error */}
+              {!jobStatus.results.qa && jobStatus.errors?.qa && (
+                <div className="space-y-3">
+                  <h3 className="font-medium text-gray-900 flex items-center space-x-2">
+                    <AlertCircle className="h-5 w-5 text-red-600" />
+                    <span>Q&A Failed</span>
+                  </h3>
+                  <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                    <p className="text-red-800 font-medium mb-2">Error in Q&A processing:</p>
+                    <p className="text-red-700">{jobStatus.errors.qa}</p>
+                  </div>
+                </div>
               )}
             </div>
           )}
