@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import axios from 'axios';
 import { X, Save, AlertCircle, CheckCircle } from 'lucide-react';
 
 interface SaveContentModalProps {
@@ -59,26 +60,15 @@ const SaveContentModal: React.FC<SaveContentModalProps> = ({
     setError(null);
 
     try {
-      const response = await fetch('/api/saved-content', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          title: title.trim(),
-          description: description.trim() || undefined,
-          type,
-          content,
-          metadata,
-        }),
+      const response = await axios.post('/api/saved-content', {
+        title: title.trim(),
+        description: description.trim() || undefined,
+        type,
+        content,
+        metadata,
       });
 
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to save content');
-      }
-
-      const data = await response.json();
-      console.log('Content saved:', data);
+      console.log('Content saved:', response.data);
 
       // Show success
       setSuccess(true);
@@ -94,7 +84,7 @@ const SaveContentModal: React.FC<SaveContentModalProps> = ({
       }, 1500);
     } catch (err: any) {
       console.error('Error saving content:', err);
-      setError(err.message || 'Failed to save content');
+      setError(err.response?.data?.error || err.message || 'Failed to save content');
     } finally {
       setIsLoading(false);
     }

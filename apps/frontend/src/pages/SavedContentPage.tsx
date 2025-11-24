@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import {
   Search,
   Filter,
@@ -78,20 +79,11 @@ const SavedContentPage: React.FC = () => {
     setError(null);
 
     try {
-      const response = await fetch('/api/saved-content', {
-        credentials: 'include',
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to fetch saved content');
-      }
-
-      const data = await response.json();
-      setItems(data.data || []);
+      const response = await axios.get('/api/saved-content');
+      setItems(response.data.data || []);
     } catch (err: any) {
       console.error('Error fetching saved content:', err);
-      setError(err.message || 'Failed to load saved content');
+      setError(err.response?.data?.error || err.message || 'Failed to load saved content');
     } finally {
       setIsLoading(false);
     }
@@ -104,21 +96,13 @@ const SavedContentPage: React.FC = () => {
     }
 
     try {
-      const response = await fetch(`/api/saved-content/${id}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to delete');
-      }
+      await axios.delete(`/api/saved-content/${id}`);
 
       // Remove from local state
       setItems((prev) => prev.filter((item) => item._id !== id));
     } catch (err: any) {
       console.error('Error deleting item:', err);
-      alert(err.message || 'Failed to delete item');
+      alert(err.response?.data?.error || err.message || 'Failed to delete item');
     }
   };
 
