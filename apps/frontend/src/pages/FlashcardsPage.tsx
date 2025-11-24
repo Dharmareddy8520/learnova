@@ -1,8 +1,9 @@
 // src/pages/FlashcardsPage.tsx
 import React, { useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
-import { RotateCcw } from 'lucide-react'
+import { RotateCcw, Save } from 'lucide-react'
 import AppSidebar from '../components/AppSidebar' // ✅ add the global sidebar
+import SaveContentModal from '../components/SaveContentModal'
 
 type Flashcard = { front: string; back: string }
 
@@ -58,6 +59,36 @@ const FlashcardsPage: React.FC = () => {
   const [cards, setCards] = useState<Flashcard[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  // Save modal state
+  const [saveModal, setSaveModal] = useState<{
+    isOpen: boolean
+    type: 'flashcard' | null
+    content: any
+    metadata?: any
+  }>({
+    isOpen: false,
+    type: null,
+    content: null,
+    metadata: {},
+  })
+
+  const openSaveModal = () => {
+    if (cards && cards.length > 0) {
+      setSaveModal({
+        isOpen: true,
+        type: 'flashcard',
+        content: cards,
+        metadata: {
+          itemCount: cards.length,
+        },
+      })
+    }
+  }
+
+  const closeSaveModal = () => {
+    setSaveModal({ isOpen: false, type: null, content: null, metadata: {} })
+  }
 
   useEffect(() => {
     if (!cards) {
@@ -115,9 +146,20 @@ const FlashcardsPage: React.FC = () => {
       {/* If your rail width differs, adjust md:ml-64 accordingly */}
       <main className="pt-14 pb-14 md:pt-0 md:pb-0 md:ml-64">
         <div className="container mx-auto p-6">
-          <h1 className="text-3xl font-bold mb-6 text-indigo-700">
-            ✨ Flashcard Generator
-          </h1>
+          <div className="flex items-center justify-between mb-6">
+            <h1 className="text-3xl font-bold text-indigo-700">
+              ✨ Flashcard Generator
+            </h1>
+            {cards && cards.length > 0 && (
+              <button
+                onClick={openSaveModal}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition shadow-md"
+              >
+                <Save className="h-4 w-4" />
+                Save Flashcards ({cards.length})
+              </button>
+            )}
+          </div>
 
           <form
             onSubmit={handleGenerate}
@@ -186,26 +228,51 @@ const FlashcardsPage: React.FC = () => {
 
           {/* Flashcards preview */}
           {cards && cards.length > 0 && (
-            <div className="mt-8 grid gap-4 sm:grid-cols-2 md:grid-cols-3">
-              {cards.map((c, i) => (
-                <div
-                  key={i}
-                  className="group cursor-pointer rounded-2xl bg-gradient-to-br from-indigo-50 to-white p-5 shadow-sm hover:shadow-md transition"
+            <div className="mt-8">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold text-gray-900">
+                  Generated Flashcards ({cards.length})
+                </h2>
+                <button
+                  onClick={openSaveModal}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition shadow-md"
                 >
-                  <div className="text-sm font-semibold text-indigo-600 mb-2">
-                    Flashcard {i + 1}
+                  <Save className="h-4 w-4" />
+                  Save All
+                </button>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+                {cards.map((c, i) => (
+                  <div
+                    key={i}
+                    className="group cursor-pointer rounded-2xl bg-gradient-to-br from-indigo-50 to-white p-5 shadow-sm hover:shadow-md transition"
+                  >
+                    <div className="text-sm font-semibold text-indigo-600 mb-2">
+                      Flashcard {i + 1}
+                    </div>
+                    <div className="text-gray-800 font-medium mb-1">{c.front}</div>
+                    <div className="hidden group-hover:block text-sm text-gray-600 mt-2 transition">
+                      <span className="font-semibold text-indigo-700">Answer:</span>{' '}
+                      {c.back}
+                    </div>
                   </div>
-                  <div className="text-gray-800 font-medium mb-1">{c.front}</div>
-                  <div className="hidden group-hover:block text-sm text-gray-600 mt-2 transition">
-                    <span className="font-semibold text-indigo-700">Answer:</span>{' '}
-                    {c.back}
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )}
         </div>
       </main>
+      
+      {/* Save Content Modal */}
+      {saveModal.isOpen && saveModal.type && (
+        <SaveContentModal
+          isOpen={saveModal.isOpen}
+          onClose={closeSaveModal}
+          type={saveModal.type}
+          content={saveModal.content}
+          metadata={saveModal.metadata}
+        />
+      )}
     </div>
   )
 }

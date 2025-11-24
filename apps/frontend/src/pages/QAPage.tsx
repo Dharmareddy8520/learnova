@@ -1,8 +1,9 @@
 // src/pages/QAPage.tsx
 import React, { useState } from "react";
 import axios from "axios";
-import { MessageSquare, Copy, Check } from "lucide-react";
+import { MessageSquare, Copy, Check, Save } from "lucide-react";
 import AppSidebar from "../components/AppSidebar"; // ✅ add the global sidebar
+import SaveContentModal from '../components/SaveContentModal';
 import usePageMeta from '../hooks/usePageMeta'
 
 type QAItem = {
@@ -34,6 +35,36 @@ export default function QAPage() {
   const [history, setHistory] = useState<QAItem[]>([]);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Save modal state
+  const [saveModal, setSaveModal] = useState<{
+    isOpen: boolean;
+    type: 'qa' | null;
+    content: any;
+    metadata?: any;
+  }>({
+    isOpen: false,
+    type: null,
+    content: null,
+    metadata: {},
+  });
+
+  const openSaveModal = () => {
+    if (history.length > 0) {
+      setSaveModal({
+        isOpen: true,
+        type: 'qa',
+        content: history,
+        metadata: {
+          itemCount: history.length,
+        },
+      });
+    }
+  };
+
+  const closeSaveModal = () => {
+    setSaveModal({ isOpen: false, type: null, content: null, metadata: {} });
+  };
 
   usePageMeta({
     title: 'Ask — Learnova AI Q&A',
@@ -162,7 +193,18 @@ export default function QAPage() {
             </div>
 
             <div className={ui.card}>
-              <h2 className="text-lg font-semibold text-gray-900 mb-2">Conversation</h2>
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-lg font-semibold text-gray-900">Conversation</h2>
+                {history.length > 0 && (
+                  <button
+                    onClick={openSaveModal}
+                    className="inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition shadow-sm"
+                  >
+                    <Save className="h-4 w-4" />
+                    Save Q&A ({history.length})
+                  </button>
+                )}
+              </div>
 
               {/* Chat area */}
               <div className="flex flex-col gap-4 mb-4 max-h-[56vh] overflow-y-auto p-2">
@@ -228,7 +270,16 @@ export default function QAPage() {
           {/* History */}
           {!!history.length && (
             <div className="mt-8">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">Recent Q/A</h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-gray-700">Recent Q/A</h3>
+                <button
+                  onClick={openSaveModal}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition shadow-sm"
+                >
+                  <Save className="h-4 w-4" />
+                  Save All ({history.length})
+                </button>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {history.map((h, i) => (
                   <div key={i} className="rounded-xl border border-gray-200 bg-white p-4">
@@ -243,6 +294,17 @@ export default function QAPage() {
           )}
         </div>
       </main>
+      
+      {/* Save Content Modal */}
+      {saveModal.isOpen && saveModal.type && (
+        <SaveContentModal
+          isOpen={saveModal.isOpen}
+          onClose={closeSaveModal}
+          type={saveModal.type}
+          content={saveModal.content}
+          metadata={saveModal.metadata}
+        />
+      )}
     </div>
   );
 }

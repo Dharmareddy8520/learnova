@@ -2,8 +2,9 @@
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import AppSidebar from "../components/AppSidebar"; // ✅ shared sidebar (mobile + desktop)
+import SaveContentModal from "../components/SaveContentModal";
 
-import { Calendar, BookOpen, Zap, Brain } from "lucide-react";
+import { Calendar, BookOpen, Zap, Brain, Save } from "lucide-react";
 
 type DashboardData = {
   progressData?: {
@@ -68,6 +69,9 @@ export default function Dashboard() {
   const [summarizing, setSummarizing] = useState(false);
   const [sumError, setSumError] = useState<string | null>(null);
   const [sumWarning, setSumWarning] = useState<string | null>(null);
+
+  // Save modal state
+  const [saveModalOpen, setSaveModalOpen] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -205,8 +209,19 @@ export default function Dashboard() {
 
             {/* Right: Summary */}
             <div className={ui.card}>
-              <h2 className="text-xl font-semibold text-gray-900">Summary</h2>
-              <div className="mt-4 rounded-lg bg-gray-50 p-4 text-gray-800 min-h-[220px]">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold text-gray-900">Summary</h2>
+                {summary && (
+                  <button
+                    onClick={() => setSaveModalOpen(true)}
+                    className="inline-flex items-center gap-2 px-3 py-1 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+                  >
+                    <Save className="h-4 w-4" />
+                    Save
+                  </button>
+                )}
+              </div>
+              <div className="rounded-lg bg-gray-50 p-4 text-gray-800 min-h-[220px]">
                 {summary ? (
                   <p className="whitespace-pre-wrap leading-relaxed">{summary}</p>
                 ) : loading ? (
@@ -235,6 +250,17 @@ export default function Dashboard() {
           </section>
         </div>
       </main>
+
+      {/* Save Content Modal */}
+      <SaveContentModal
+        isOpen={saveModalOpen}
+        onClose={() => setSaveModalOpen(false)}
+        type="summary"
+        content={summary}
+        metadata={{
+          wordCount: summary.split(/\s+/).length,
+        }}
+      />
     </div>
   );
 }

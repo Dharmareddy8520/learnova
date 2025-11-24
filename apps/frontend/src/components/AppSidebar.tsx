@@ -15,6 +15,7 @@ const items: Item[] = [
   { label: "Quiz Generation",    path: "/quiz-generator" },
   { label: "Q&A Assistance",     path: "/qa" },
   { label: "Flashcard Creation", path: "/flashcards" },
+  { label: "Saved Content",      path: "/saved" },
   { label: "Profile",            path: "/account" },
 ];
 

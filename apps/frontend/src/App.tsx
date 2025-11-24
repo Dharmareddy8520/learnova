@@ -14,6 +14,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 import QAPage from './pages/QAPage'
 import FileSummarizerPage from './pages/FileSummarizerPage'
 import DocumentAnalyzerPage from './pages/DocumentAnalyzerPage'
+import SavedContentPage from './pages/SavedContentPage'
 
 function App() {
   return (
@@ -32,6 +33,14 @@ function App() {
           <Route path="/analyzer" element={<DocumentAnalyzerPage />} />
           <Route path="/account" element={<ProfilePage />} />
           <Route path="/qa" element={<QAPage />} />
+          <Route 
+            path="/saved" 
+            element={
+              <ProtectedRoute>
+                <SavedContentPage />
+              </ProtectedRoute>
+            } 
+          />
           <Route 
             path="/dashboard" 
             element={

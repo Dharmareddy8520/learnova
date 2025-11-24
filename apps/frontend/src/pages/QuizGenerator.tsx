@@ -2,8 +2,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
-import { Play, RotateCcw, ChevronRight } from 'lucide-react'
+import { Play, RotateCcw, ChevronRight, Save } from 'lucide-react'
 import AppSidebar from '../components/AppSidebar' // <-- use your working sidebar
+import SaveContentModal from '../components/SaveContentModal'
 
 type Question = {
   question: string
@@ -86,9 +87,11 @@ function normalizeQuiz(raw: any): Question[] {
 function QuizPlayer({
   quiz,
   onRestart,
+  onSave,
 }: {
   quiz: Question[]
   onRestart: () => void
+  onSave?: () => void
 }) {
   const [idx, setIdx] = useState(0)
   const [selected, setSelected] = useState<number | null>(null)
@@ -158,15 +161,34 @@ function QuizPlayer({
   if (finished) {
     const total = quiz.length
     const pct = Math.round((score / total) * 100)
+    const passed = pct >= 70
+    
     return (
       <div className="mt-6 rounded-2xl border border-gray-200 p-6 bg-white shadow-sm">
-        <h2 className="text-xl font-semibold mb-2">Results</h2>
-        <p className="text-gray-700 mb-4">
-          Score: <span className="font-semibold">{score}</span> / {total} ({pct}
-          %)
-        </p>
-        <div className="mb-6 h-3 w-full rounded bg-gray-200 overflow-hidden">
-          <div className="h-3 bg-green-500 transition-all" style={{ width: `${pct}%` }} />
+        <div className="text-center mb-6">
+          <div className={`inline-flex items-center justify-center w-20 h-20 rounded-full mb-4 ${
+            passed ? 'bg-green-100' : 'bg-yellow-100'
+          }`}>
+            <span className="text-4xl">{passed ? '🎉' : '💪'}</span>
+          </div>
+          <h2 className="text-2xl font-bold mb-2">
+            {passed ? 'Great Job!' : 'Keep Practicing!'}
+          </h2>
+          <p className="text-gray-700 text-lg">
+            Score: <span className="font-bold text-2xl">{score}</span> / {total}
+            <span className={`ml-2 font-semibold ${
+              passed ? 'text-green-600' : 'text-yellow-600'
+            }`}>({pct}%)</span>
+          </p>
+        </div>
+        
+        <div className="mb-6 h-4 w-full rounded-full bg-gray-200 overflow-hidden">
+          <div 
+            className={`h-4 transition-all duration-1000 ${
+              passed ? 'bg-green-500' : 'bg-yellow-500'
+            }`}
+            style={{ width: `${pct}%` }}
+          />
         </div>
 
         <details className="mb-6">
@@ -207,25 +229,47 @@ function QuizPlayer({
           </ol>
         </details>
 
-        <button onClick={restart} className={`${ui.btn} ${ui.primary} px-4 py-2`}>
-          <RotateCcw className="h-4 w-4" />
-          Restart
-        </button>
+        <div className="flex items-center justify-center gap-3">
+          <button onClick={restart} className={`${ui.btn} ${ui.primary} px-4 py-2`}>
+            <RotateCcw className="h-4 w-4" />
+            Restart Quiz
+          </button>
+          {onSave && (
+            <button
+              onClick={onSave}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition shadow-md"
+            >
+              <Save className="h-4 w-4" />
+              Save Quiz
+            </button>
+          )}
+        </div>
       </div>
     )
   }
 
   return (
     <div className="mt-6">
-      {/* Progress */}
-      <div className="mb-4">
-        <div className="flex justify-between text-sm text-gray-600 mb-1">
-          <span>Question {idx + 1} of {quiz.length}</span>
-          <span>{progress}%</span>
+      {/* Header with Save Button */}
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex-1">
+          <div className="flex justify-between text-sm text-gray-600 mb-1">
+            <span>Question {idx + 1} of {quiz.length}</span>
+            <span>{progress}%</span>
+          </div>
+          <div className="h-2 w-full bg-gray-200 rounded overflow-hidden">
+            <div className="h-2 bg-indigo-600 transition-all" style={{ width: `${progress}%` }} />
+          </div>
         </div>
-        <div className="h-2 w-full bg-gray-200 rounded overflow-hidden">
-          <div className="h-2 bg-indigo-600 transition-all" style={{ width: `${progress}%` }} />
-        </div>
+        {onSave && (
+          <button
+            onClick={onSave}
+            className="ml-4 inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition shadow-sm"
+          >
+            <Save className="h-4 w-4" />
+            Save
+          </button>
+        )}
       </div>
 
       {/* Question card */}
@@ -331,6 +375,37 @@ const QuizGenerator = () => {
   const [isLoading, setIsLoading] = useState(false)
   const [started, setStarted] = useState(false)
   const [joinInput, setJoinInput] = useState('')
+  
+  // Save modal state
+  const [saveModal, setSaveModal] = useState<{
+    isOpen: boolean
+    type: 'quiz' | null
+    content: any
+    metadata?: any
+  }>({
+    isOpen: false,
+    type: null,
+    content: null,
+    metadata: {},
+  })
+
+  const openSaveModal = () => {
+    if (quiz) {
+      setSaveModal({
+        isOpen: true,
+        type: 'quiz',
+        content: quiz,
+        metadata: {
+          itemCount: quiz.length,
+          difficulty: formData.difficulty,
+        },
+      })
+    }
+  }
+
+  const closeSaveModal = () => {
+    setSaveModal({ isOpen: false, type: null, content: null, metadata: {} })
+  }
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
@@ -379,7 +454,7 @@ const QuizGenerator = () => {
   const header = useMemo(
     () => (
       <div className="flex items-center justify-between gap-4 mb-8">
-        <h1 className="text-3xl font-bold text-indigo-700">✨ Quiz Generator</h1>
+        <h1 className="text-3xl font-bold text-indigo-700 my-5">✨ Quiz Generator</h1>
         <div className="flex items-center gap-3">
           <input
             type="text"
@@ -498,7 +573,7 @@ const QuizGenerator = () => {
           </form>
         ) : (
           <div className="mt-4">
-            {quiz && <QuizPlayer quiz={quiz} onRestart={onRestart} />}
+            {quiz && <QuizPlayer quiz={quiz} onRestart={onRestart} onSave={openSaveModal} />}
           </div>
         )}
         <div className="mt-8 max-w-2xl">
@@ -510,6 +585,17 @@ const QuizGenerator = () => {
           </button>
         </div>
       </main>
+      
+      {/* Save Content Modal */}
+      {saveModal.isOpen && saveModal.type && (
+        <SaveContentModal
+          isOpen={saveModal.isOpen}
+          onClose={closeSaveModal}
+          type={saveModal.type}
+          content={saveModal.content}
+          metadata={saveModal.metadata}
+        />
+      )}
     </div>
   )
 }

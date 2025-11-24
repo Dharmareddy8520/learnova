@@ -23,6 +23,7 @@ import uploadRoutes from './routes/upload';
 import summaryRoutes from './routes/summary';
 import { isAuthenticated } from './middleware/auth';
 import challengeRoutes from './routes/challenge';
+import savedContentRoutes from './routes/saved-content';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -147,6 +148,9 @@ app.use('/api/usage', usageRoutes);
 
 // Challenge routes
 app.use('/api/challenge', challengeRoutes);
+
+// Saved content routes (summaries, quizzes, flashcards)
+app.use('/api', isAuthenticated, savedContentRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

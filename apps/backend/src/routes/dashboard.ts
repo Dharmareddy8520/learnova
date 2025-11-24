@@ -1,4 +1,6 @@
 import express, { Request, Response } from 'express';
+import SavedContent from '../models/SavedContent';
+import UsageEvent from '../models/UsageEvent';
 
 const router = express.Router();
 
@@ -14,14 +16,30 @@ router.get('/', async (req: Request, res: Response) => {
     // Update consecutive days
     const consecutiveDays = await user.calculateConsecutiveDays();
     
+    // Count saved content by type
+    const documentsCount = await SavedContent.countDocuments({ 
+      userId: user._id, 
+      type: 'summary' 
+    });
+    
+    const flashcardsCount = await SavedContent.countDocuments({ 
+      userId: user._id, 
+      type: 'flashcard' 
+    });
+    
+    const quizzesCount = await SavedContent.countDocuments({ 
+      userId: user._id, 
+      type: 'quiz' 
+    });
+    
     res.json({
       recentDocs: [], // Will be implemented in later steps
       progressData: {
         consecutiveDays,
         totalDays: Math.floor((Date.now() - new Date(user.startedAt).getTime()) / (1000 * 60 * 60 * 24)),
-        documentsCount: 0,
-        flashcardsStudied: 0,
-        quizzesCompleted: 0
+        documentsCount,
+        flashcardsStudied: flashcardsCount,
+        quizzesCompleted: quizzesCount
       },
       consecutiveDays,
       recommendations: [

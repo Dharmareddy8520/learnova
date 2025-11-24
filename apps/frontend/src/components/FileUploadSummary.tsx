@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
-import { Upload, FileText, Clock, CheckCircle, AlertCircle, RotateCcw, Play, ChevronRight, ChevronLeft, Eye, EyeOff, MessageSquare, Copy, Check } from 'lucide-react';
+import { Upload, FileText, Clock, CheckCircle, AlertCircle, RotateCcw, Play, ChevronRight, ChevronLeft, Eye, EyeOff, MessageSquare, Copy, Check, Save } from 'lucide-react';
+import SaveContentModal from './SaveContentModal';
 
 // Types for interactive components
 type Question = {
@@ -112,8 +113,8 @@ function normalizeFlashcards(raw: any): Flashcard[] {
   return [];
 }
 
-// Interactive Quiz Player Component (based on QuizGenerator.tsx)
-const QuizPlayer: React.FC<{ questions: Question[], onRestart: () => void }> = ({ questions, onRestart }) => {
+// Interactive Quiz Player Component with enhanced UX
+const QuizPlayer: React.FC<{ questions: Question[], onRestart: () => void, onSave?: () => void }> = ({ questions, onRestart, onSave }) => {
   const [idx, setIdx] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
   const [locked, setLocked] = useState(false);
@@ -152,19 +153,54 @@ const QuizPlayer: React.FC<{ questions: Question[], onRestart: () => void }> = (
   if (finished) {
     const total = questions.length;
     const pct = Math.round((score / total) * 100);
+    const passed = pct >= 70;
+    
     return (
       <div className="mt-6 rounded-2xl border border-gray-200 p-6 bg-white shadow-sm">
-        <h2 className="text-xl font-semibold mb-2">Quiz Results</h2>
-        <p className="text-gray-700 mb-4">
-          Score: <span className="font-semibold">{score}</span> / {total} ({pct}%)
-        </p>
-        <div className="mb-6 h-3 w-full rounded bg-gray-200 overflow-hidden">
-          <div className="h-3 bg-green-500 transition-all" style={{ width: `${pct}%` }} />
+        <div className="text-center mb-6">
+          <div className={`inline-flex items-center justify-center w-20 h-20 rounded-full mb-4 ${
+            passed ? 'bg-green-100' : 'bg-yellow-100'
+          }`}>
+            <span className="text-4xl">{passed ? '🎉' : '💪'}</span>
+          </div>
+          <h2 className="text-2xl font-bold mb-2">
+            {passed ? 'Great Job!' : 'Keep Practicing!'}
+          </h2>
+          <p className="text-gray-700 text-lg">
+            Score: <span className="font-bold text-2xl">{score}</span> / {total}
+            <span className={`ml-2 font-semibold ${
+              passed ? 'text-green-600' : 'text-yellow-600'
+            }`}>({pct}%)</span>
+          </p>
         </div>
-        <button onClick={restart} className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
-          <RotateCcw className="h-4 w-4" />
-          Restart Quiz
-        </button>
+        
+        <div className="mb-6 h-4 w-full rounded-full bg-gray-200 overflow-hidden">
+          <div 
+            className={`h-4 transition-all duration-1000 ${
+              passed ? 'bg-green-500' : 'bg-yellow-500'
+            }`}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+
+        <div className="flex items-center justify-center gap-3">
+          <button 
+            onClick={restart} 
+            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+          >
+            <RotateCcw className="h-4 w-4" />
+            Restart Quiz
+          </button>
+          {onSave && (
+            <button
+              onClick={onSave}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+            >
+              <Save className="h-4 w-4" />
+              Save Quiz
+            </button>
+          )}
+        </div>
       </div>
     );
   }
@@ -250,12 +286,15 @@ const QuizPlayer: React.FC<{ questions: Question[], onRestart: () => void }> = (
   );
 };
 
-// Interactive Flashcard Viewer Component (based on FlashcardsPage.tsx)
-const FlashcardViewer: React.FC<{ cards: Flashcard[] }> = ({ cards }) => {
+// Interactive Flashcard Viewer Component with 3D flip animation
+const FlashcardViewer: React.FC<{ cards: Flashcard[]; onSave?: () => void }> = ({ cards, onSave }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
+  const [mastered, setMastered] = useState<Set<number>>(new Set());
 
   const currentCard = cards[currentIndex];
+  const progress = Math.round((currentIndex / cards.length) * 100);
+  const masteredCount = mastered.size;
 
   const handleNext = () => {
     setCurrentIndex((prev) => (prev + 1) % cards.length);
@@ -267,68 +306,145 @@ const FlashcardViewer: React.FC<{ cards: Flashcard[] }> = ({ cards }) => {
     setIsFlipped(false);
   };
 
+  const handleFlip = () => {
+    setIsFlipped(!isFlipped);
+  };
+
+  const handleMastered = () => {
+    setMastered((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(currentIndex)) {
+        newSet.delete(currentIndex);
+      } else {
+        newSet.add(currentIndex);
+      }
+      return newSet;
+    });
+  };
+
+  const isMastered = mastered.has(currentIndex);
+
   return (
     <div className="space-y-4">
+      {/* Progress and Controls */}
       <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold text-gray-900">
-          Flashcard {currentIndex + 1} of {cards.length}
-        </h3>
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900">
+            Flashcard {currentIndex + 1} of {cards.length}
+          </h3>
+          <p className="text-sm text-gray-600">
+            Mastered: {masteredCount} / {cards.length}
+          </p>
+        </div>
         <div className="flex items-center gap-2">
+          {onSave && (
+            <button
+              onClick={onSave}
+              className="inline-flex items-center gap-2 px-3 py-1 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+            >
+              <Save className="h-4 w-4" />
+              Save
+            </button>
+          )}
           <button
-            onClick={() => setIsFlipped(!isFlipped)}
+            onClick={handleFlip}
             className="inline-flex items-center gap-2 px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition"
           >
             {isFlipped ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            {isFlipped ? 'Hide Answer' : 'Show Answer'}
+            Flip
           </button>
         </div>
       </div>
 
-      <div className="relative">
+      {/* Progress Bar */}
+      <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
         <div 
-          className="h-48 bg-white rounded-xl border border-gray-200 shadow-sm cursor-pointer transition-transform hover:scale-[1.02]"
-          onClick={() => setIsFlipped(!isFlipped)}
+          className="h-full bg-indigo-600 transition-all duration-300"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+
+      {/* 3D Flip Card */}
+      <div className="relative h-64 perspective-1000">
+        <div
+          className={`relative w-full h-full transition-transform duration-500 transform-style-3d cursor-pointer ${
+            isFlipped ? 'rotate-y-180' : ''
+          }`}
+          onClick={handleFlip}
+          style={{
+            transformStyle: 'preserve-3d',
+            transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
+          }}
         >
-          <div className="h-full p-6 flex items-center justify-center">
-            <div className="text-center">
-              <p className="text-lg font-medium text-gray-900 mb-2">
-                {isFlipped ? 'Answer:' : 'Question:'}
-              </p>
-              <p className="text-gray-700">
-                {isFlipped ? currentCard.back : currentCard.front}
-              </p>
+          {/* Front */}
+          <div
+            className="absolute w-full h-full bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl shadow-xl p-8 flex items-center justify-center backface-hidden"
+            style={{ backfaceVisibility: 'hidden' }}
+          >
+            <div className="text-center text-white">
+              <p className="text-sm font-semibold mb-3 opacity-80">QUESTION</p>
+              <p className="text-xl font-medium leading-relaxed">{currentCard.front}</p>
+            </div>
+          </div>
+
+          {/* Back */}
+          <div
+            className="absolute w-full h-full bg-gradient-to-br from-green-500 to-teal-600 rounded-2xl shadow-xl p-8 flex items-center justify-center backface-hidden"
+            style={{
+              backfaceVisibility: 'hidden',
+              transform: 'rotateY(180deg)',
+            }}
+          >
+            <div className="text-center text-white">
+              <p className="text-sm font-semibold mb-3 opacity-80">ANSWER</p>
+              <p className="text-xl font-medium leading-relaxed">{currentCard.back}</p>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="flex justify-between items-center">
+      {/* Navigation and Actions */}
+      <div className="flex items-center justify-between gap-3">
         <button
           onClick={handlePrev}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition"
+          disabled={cards.length === 1}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
         >
           <ChevronLeft className="h-4 w-4" />
           Previous
         </button>
-        
-        <span className="text-sm text-gray-600">
-          Click card to flip
-        </span>
-        
+
+        <button
+          onClick={handleMastered}
+          className={`px-4 py-2 rounded-lg font-medium transition ${
+            isMastered
+              ? 'bg-green-100 text-green-800 border border-green-300'
+              : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+          }`}
+        >
+          {isMastered ? '✓ Mastered' : 'Mark as Mastered'}
+        </button>
+
         <button
           onClick={handleNext}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition"
+          disabled={cards.length === 1}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
         >
           Next
           <ChevronRight className="h-4 w-4" />
         </button>
       </div>
+
+      {/* Hint */}
+      <p className="text-center text-sm text-gray-500">
+        💡 Click the card or "Flip" button to reveal the answer
+      </p>
     </div>
   );
 };
 
 // Interactive Q&A Component (based on QAPage.tsx)
-const QASection: React.FC<{ hasContent: boolean }> = ({ hasContent }) => {
+const QASection: React.FC<{ hasContent: boolean; onSave?: (history: QAItem[]) => void }> = ({ hasContent, onSave }) => {
   const [question, setQuestion] = useState('');
   const [loading, setLoading] = useState(false);
   const [history, setHistory] = useState<QAItem[]>([]);
@@ -380,14 +496,34 @@ const QASection: React.FC<{ hasContent: boolean }> = ({ hasContent }) => {
 
   return (
     <div className="space-y-3">
-      <h3 className="font-medium text-gray-900 flex items-center space-x-2">
-        <MessageSquare className="h-5 w-5 text-orange-600" />
-        <span>Ask Questions</span>
-      </h3>
+      <div className="flex items-center justify-between">
+        <h3 className="font-medium text-gray-900 flex items-center space-x-2">
+          <MessageSquare className="h-5 w-5 text-orange-600" />
+          <span>Ask Questions</span>
+        </h3>
+        {history.length > 0 && onSave && (
+          <button
+            onClick={() => onSave(history)}
+            className="inline-flex items-center gap-2 px-3 py-1 text-sm bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition"
+          >
+            <Save className="h-4 w-4" />
+            Save Q&A History ({history.length})
+          </button>
+        )}
+      </div>
       <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg space-y-4">
-        <p className="text-gray-800">
-          Document analyzed and ready for questions. Ask anything about the content:
-        </p>
+        <div className="flex items-center gap-2">
+          <div className="flex-1">
+            <p className="text-gray-800">
+              Document analyzed and ready for questions. Ask anything about the content:
+            </p>
+          </div>
+          {history.length > 0 && (
+            <span className="text-sm font-medium text-orange-700 bg-orange-100 px-3 py-1 rounded-full">
+              {history.length} Q&A
+            </span>
+          )}
+        </div>
         
         <form onSubmit={ask} className="space-y-3">
           <div className="flex space-x-2">
@@ -473,6 +609,27 @@ const FileUploadSummary: React.FC = () => {
     quiz: { active: false, questions: [] },
     flashcards: { active: false, cards: [] }
   });
+
+  // Save modal state
+  const [saveModal, setSaveModal] = useState<{
+    isOpen: boolean;
+    type: 'summary' | 'quiz' | 'flashcard' | 'qa' | null;
+    content: any;
+    metadata?: any;
+  }>({
+    isOpen: false,
+    type: null,
+    content: null,
+    metadata: {},
+  });
+
+  const openSaveModal = (type: 'summary' | 'quiz' | 'flashcard' | 'qa', content: any, metadata?: any) => {
+    setSaveModal({ isOpen: true, type, content, metadata });
+  };
+
+  const closeSaveModal = () => {
+    setSaveModal({ isOpen: false, type: null, content: null, metadata: {} });
+  };
 
   const startInteractiveQuiz = () => {
     if (!jobStatus?.results?.quiz) return;
@@ -709,10 +866,22 @@ const FileUploadSummary: React.FC = () => {
               {/* Summary Results */}
               {jobStatus.results.summary && (
                 <div className="space-y-3">
-                  <h3 className="font-medium text-gray-900 flex items-center space-x-2">
-                    <CheckCircle className="h-5 w-5 text-green-600" />
-                    <span>Summary</span>
-                  </h3>
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-medium text-gray-900 flex items-center space-x-2">
+                      <CheckCircle className="h-5 w-5 text-green-600" />
+                      <span>Summary</span>
+                    </h3>
+                    <button
+                      onClick={() => openSaveModal('summary', jobStatus.results?.summary, {
+                        originalFileName: file?.name,
+                        wordCount: jobStatus.results?.summary?.split(/\s+/).length,
+                      })}
+                      className="inline-flex items-center gap-2 px-3 py-1 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+                    >
+                      <Save className="h-4 w-4" />
+                      Save Summary
+                    </button>
+                  </div>
                   <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
                     <p className="text-gray-800 leading-relaxed">{jobStatus.results.summary}</p>
                   </div>
@@ -736,6 +905,7 @@ const FileUploadSummary: React.FC = () => {
               {/* Quiz Results - Interactive Mode */}
               {jobStatus.results.quiz && (() => {
                 const questions = normalizeQuiz(jobStatus.results.quiz);
+                const hasQuizData = Array.isArray(jobStatus.results.quiz) && jobStatus.results.quiz.length > 0;
                 
                 // If interactive mode is active, show the quiz player
                 if (interactiveMode.quiz.active && interactiveMode.quiz.questions.length > 0) {
@@ -746,42 +916,85 @@ const FileUploadSummary: React.FC = () => {
                           <CheckCircle className="h-5 w-5 text-purple-600" />
                           <span>Interactive Quiz</span>
                         </h3>
-                        <button
-                          onClick={resetInteractiveMode}
-                          className="text-sm text-gray-600 hover:text-gray-800 underline"
-                        >
-                          Exit Quiz
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => openSaveModal('quiz', jobStatus.results?.quiz, {
+                              originalFileName: file?.name,
+                              itemCount: interactiveMode.quiz.questions.length,
+                            })}
+                            className="inline-flex items-center gap-2 px-3 py-1 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
+                          >
+                            <Save className="h-4 w-4" />
+                            Save Quiz
+                          </button>
+                          <button
+                            onClick={resetInteractiveMode}
+                            className="text-sm text-gray-600 hover:text-gray-800 underline"
+                          >
+                            Exit Quiz
+                          </button>
+                        </div>
                       </div>
                       <QuizPlayer 
                         questions={interactiveMode.quiz.questions} 
                         onRestart={resetInteractiveMode}
+                        onSave={() => openSaveModal('quiz', jobStatus.results?.quiz, {
+                          itemCount: interactiveMode.quiz.questions.length,
+                          originalFileName: file?.name
+                        })}
                       />
                     </div>
                   );
                 }
                 
-                // Show quiz preview with start button
-                return questions.length > 0 ? (
-                  <div className="space-y-3">
-                    <h3 className="font-medium text-gray-900 flex items-center space-x-2">
-                      <CheckCircle className="h-5 w-5 text-purple-600" />
-                      <span>Quiz Questions ({questions.length})</span>
-                    </h3>
-                    <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
-                      <p className="text-gray-800 mb-3">
-                        Quiz generated with {questions.length} questions. Ready to start the interactive quiz?
-                      </p>
-                      <button
-                        onClick={startInteractiveQuiz}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
-                      >
-                        <Play className="h-4 w-4" />
-                        Start Interactive Quiz
-                      </button>
+                // Show quiz preview with start button - support both normalized and raw quiz
+                if (questions.length > 0 || hasQuizData) {
+                  const itemCount = questions.length > 0 ? questions.length : (Array.isArray(jobStatus.results.quiz) ? jobStatus.results.quiz.length : 0);
+                  
+                  return (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-medium text-gray-900 flex items-center space-x-2">
+                          <CheckCircle className="h-5 w-5 text-purple-600" />
+                          <span>Quiz Questions ({itemCount})</span>
+                        </h3>
+                        <button
+                          onClick={() => openSaveModal('quiz', jobStatus.results?.quiz, {
+                            originalFileName: file?.name,
+                            itemCount: itemCount,
+                          })}
+                          className="inline-flex items-center gap-2 px-3 py-1 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
+                        >
+                          <Save className="h-4 w-4" />
+                          Save Quiz
+                        </button>
+                      </div>
+                      <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                        {questions.length > 0 ? (
+                          <>
+                            <p className="text-gray-800 mb-3">
+                              Quiz generated with {questions.length} questions. Ready to start the interactive quiz?
+                            </p>
+                            <button
+                              onClick={startInteractiveQuiz}
+                              className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
+                            >
+                              <Play className="h-4 w-4" />
+                              Start Interactive Quiz
+                            </button>
+                          </>
+                        ) : (
+                          <p className="text-gray-800">
+                            Quiz generated with {itemCount} questions. Preview and interactive mode coming soon!
+                          </p>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ) : (
+                  );
+                }
+                
+                // No quiz data
+                return (
                   <div className="space-y-3">
                     <h3 className="font-medium text-gray-900 flex items-center space-x-2">
                       <CheckCircle className="h-5 w-5 text-purple-600" />
@@ -811,6 +1024,7 @@ const FileUploadSummary: React.FC = () => {
               {/* Flashcards Results - Interactive Mode */}
               {jobStatus.results.flashcards && (() => {
                 const cards = normalizeFlashcards(jobStatus.results.flashcards);
+                const hasFlashcardData = Array.isArray(jobStatus.results.flashcards) && jobStatus.results.flashcards.length > 0;
                 
                 // If interactive mode is active, show the flashcard viewer
                 if (interactiveMode.flashcards.active && interactiveMode.flashcards.cards.length > 0) {
@@ -821,39 +1035,84 @@ const FileUploadSummary: React.FC = () => {
                           <CheckCircle className="h-5 w-5 text-indigo-600" />
                           <span>Interactive Flashcards</span>
                         </h3>
-                        <button
-                          onClick={resetInteractiveMode}
-                          className="text-sm text-gray-600 hover:text-gray-800 underline"
-                        >
-                          Exit Flashcards
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => openSaveModal('flashcard', jobStatus.results?.flashcards, {
+                              originalFileName: file?.name,
+                              itemCount: interactiveMode.flashcards.cards.length,
+                            })}
+                            className="inline-flex items-center gap-2 px-3 py-1 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+                          >
+                            <Save className="h-4 w-4" />
+                            Save Flashcards
+                          </button>
+                          <button
+                            onClick={resetInteractiveMode}
+                            className="text-sm text-gray-600 hover:text-gray-800 underline"
+                          >
+                            Exit Flashcards
+                          </button>
+                        </div>
                       </div>
-                      <FlashcardViewer cards={interactiveMode.flashcards.cards} />
+                      <FlashcardViewer 
+                        cards={interactiveMode.flashcards.cards}
+                        onSave={() => openSaveModal('flashcard', jobStatus.results?.flashcards, {
+                          itemCount: interactiveMode.flashcards.cards.length,
+                          originalFileName: file?.name
+                        })}
+                      />
                     </div>
                   );
                 }
                 
-                // Show flashcards preview with start button
-                return cards.length > 0 ? (
-                  <div className="space-y-3">
-                    <h3 className="font-medium text-gray-900 flex items-center space-x-2">
-                      <CheckCircle className="h-5 w-5 text-indigo-600" />
-                      <span>Flashcards ({cards.length})</span>
-                    </h3>
-                    <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
-                      <p className="text-gray-800 mb-3">
-                        Flashcards generated with {cards.length} cards. Ready to start studying?
-                      </p>
-                      <button
-                        onClick={startInteractiveFlashcards}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
-                      >
-                        <Eye className="h-4 w-4" />
-                        Start Flashcard Study
-                      </button>
+                // Show flashcards preview with start button - support both normalized and raw data
+                if (cards.length > 0 || hasFlashcardData) {
+                  const itemCount = cards.length > 0 ? cards.length : (Array.isArray(jobStatus.results.flashcards) ? jobStatus.results.flashcards.length : 0);
+                  
+                  return (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-medium text-gray-900 flex items-center space-x-2">
+                          <CheckCircle className="h-5 w-5 text-indigo-600" />
+                          <span>Flashcards ({itemCount})</span>
+                        </h3>
+                        <button
+                          onClick={() => openSaveModal('flashcard', jobStatus.results?.flashcards, {
+                            originalFileName: file?.name,
+                            itemCount: itemCount,
+                          })}
+                          className="inline-flex items-center gap-2 px-3 py-1 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+                        >
+                          <Save className="h-4 w-4" />
+                          Save Flashcards
+                        </button>
+                      </div>
+                      <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
+                        {cards.length > 0 ? (
+                          <>
+                            <p className="text-gray-800 mb-3">
+                              Flashcards generated with {cards.length} cards. Ready to start studying?
+                            </p>
+                            <button
+                              onClick={startInteractiveFlashcards}
+                              className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+                            >
+                              <Eye className="h-4 w-4" />
+                              Start Flashcard Study
+                            </button>
+                          </>
+                        ) : (
+                          <p className="text-gray-800">
+                            Flashcards generated with {itemCount} cards. Preview and interactive mode coming soon!
+                          </p>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ) : (
+                  );
+                }
+                
+                // No flashcard data
+                return (
                   <div className="space-y-3">
                     <h3 className="font-medium text-gray-900 flex items-center space-x-2">
                       <CheckCircle className="h-5 w-5 text-indigo-600" />
@@ -882,7 +1141,13 @@ const FileUploadSummary: React.FC = () => {
 
               {/* Q&A Section - Only show if Q&A was requested */}
               {jobStatus.results.qa && (
-                <QASection hasContent={Boolean(jobStatus.results.summary || jobStatus.results.quiz || jobStatus.results.flashcards)} />
+                <QASection 
+                  hasContent={Boolean(jobStatus.results.summary || jobStatus.results.quiz || jobStatus.results.flashcards)}
+                  onSave={(history) => openSaveModal('qa', history, {
+                    itemCount: history.length,
+                    originalFileName: file?.name
+                  })}
+                />
               )}
               
               {/* Q&A Error */}
@@ -928,6 +1193,17 @@ const FileUploadSummary: React.FC = () => {
             <span>Process Another File</span>
           </button>
         </div>
+      )}
+
+      {/* Save Content Modal */}
+      {saveModal.isOpen && saveModal.type && (
+        <SaveContentModal
+          isOpen={saveModal.isOpen}
+          onClose={closeSaveModal}
+          type={saveModal.type}
+          content={saveModal.content}
+          metadata={saveModal.metadata}
+        />
       )}
     </div>
   );
