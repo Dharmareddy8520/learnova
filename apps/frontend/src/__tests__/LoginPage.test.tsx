@@ -1,11 +1,20 @@
 import { render, screen } from '@testing-library/react'
 import { BrowserRouter } from 'react-router-dom'
+import { AuthProvider } from '../contexts/AuthContext'
 import LoginPage from '../pages/LoginPage'
+import { vi } from 'vitest'
+import axios from 'axios'
+
+vi.mock('axios')
 
 const renderWithRouter = (component: React.ReactElement) => {
+  vi.mocked(axios.get).mockResolvedValue({ data: { user: null } })
+  
   return render(
     <BrowserRouter>
-      {component}
+      <AuthProvider>
+        {component}
+      </AuthProvider>
     </BrowserRouter>
   )
 }

@@ -15,6 +15,7 @@ import QAPage from './pages/QAPage'
 import FileSummarizerPage from './pages/FileSummarizerPage'
 import DocumentAnalyzerPage from './pages/DocumentAnalyzerPage'
 import SavedContentPage from './pages/SavedContentPage'
+import FeedbackAdminPage from './pages/FeedbackAdminPage'
 
 function App() {
   return (
@@ -46,6 +47,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <Dashboard />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin/feedback" 
+            element={
+              <ProtectedRoute>
+                <FeedbackAdminPage />
               </ProtectedRoute>
             } 
           />

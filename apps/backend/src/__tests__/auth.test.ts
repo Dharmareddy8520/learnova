@@ -44,6 +44,8 @@ describe('Auth Routes', () => {
   beforeEach(async () => {
     // Clean up users collection before each test
     await User.deleteMany({})
+    // Small delay to ensure cleanup completes
+    await new Promise(resolve => setTimeout(resolve, 100))
   })
 
   afterAll(async () => {
@@ -54,9 +56,10 @@ describe('Auth Routes', () => {
 
   describe('POST /api/auth/register', () => {
     test('should register a new user successfully', async () => {
+      const timestamp = Date.now()
       const userData = {
         name: 'Test User',
-        email: 'test@example.com',
+        email: `test${timestamp}@example.com`,  // Unique email
         password: 'password123'
       }
 
@@ -102,9 +105,10 @@ describe('Auth Routes', () => {
     })
 
     test('should fail with duplicate email', async () => {
+      const timestamp = Date.now()
       const userData = {
         name: 'Test User',
-        email: 'test@example.com',
+        email: `duplicate${timestamp}@example.com`,
         password: 'password123'
       }
 
@@ -113,6 +117,8 @@ describe('Auth Routes', () => {
         .post('/api/auth/register')
         .send(userData)
         .expect(200)
+
+      await new Promise(resolve => setTimeout(resolve, 200))
 
       // Try to register with same email
       const response = await request(app)
@@ -125,19 +131,24 @@ describe('Auth Routes', () => {
   })
 
   describe('POST /api/auth/login', () => {
+    let testEmail: string
+
     beforeEach(async () => {
-      // Create a test user
+      // Create a test user with unique email
+      const timestamp = Date.now()
+      testEmail = `login${timestamp}@example.com`
       const user = new User({
         name: 'Test User',
-        email: 'test@example.com',
+        email: testEmail,
         passwordHash: 'password123' // Will be hashed by pre-save middleware
       })
       await user.save()
+      await new Promise(resolve => setTimeout(resolve, 100))
     })
 
     test('should login with valid credentials', async () => {
       const loginData = {
-        email: 'test@example.com',
+        email: testEmail,
         password: 'password123'
       }
 
@@ -166,7 +177,7 @@ describe('Auth Routes', () => {
 
     test('should fail with invalid password', async () => {
       const loginData = {
-        email: 'test@example.com',
+        email: testEmail,
         password: 'wrongpassword'
       }
 

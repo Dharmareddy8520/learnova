@@ -24,6 +24,7 @@ import summaryRoutes from './routes/summary';
 import { isAuthenticated } from './middleware/auth';
 import challengeRoutes from './routes/challenge';
 import savedContentRoutes from './routes/saved-content';
+import feedbackRoutes from './routes/feedback';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -148,6 +149,9 @@ app.use('/api/usage', usageRoutes);
 
 // Challenge routes
 app.use('/api/challenge', challengeRoutes);
+
+// Feedback routes (must be BEFORE authenticated routes to remain public)
+app.use('/api', feedbackRoutes);
 
 // Saved content routes (summaries, quizzes, flashcards)
 app.use('/api', isAuthenticated, savedContentRoutes);
