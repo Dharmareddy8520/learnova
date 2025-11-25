@@ -1,12 +1,14 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { Brain, BookOpen, Zap, Shield, ArrowRight } from 'lucide-react'
+import { Brain, BookOpen, Zap, Shield, ArrowRight, MessageSquare } from 'lucide-react'
 import usePageMeta from '../hooks/usePageMeta'
+import FeedbackForm from '../components/FeedbackForm'
 
 const LandingPage = () => {
   const { user, isLoading, logout } = useAuth()
   const navigate = useNavigate()
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false)
 
   useEffect(() => {
     // If auth check finished and user is logged in, redirect to dashboard
@@ -201,6 +203,36 @@ const LandingPage = () => {
             </div>
         </div>
       </div>
+
+      {/* Feedback Button Section */}
+      <div className="bg-white py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <button
+            onClick={() => setShowFeedbackModal(true)}
+            className="btn btn-outline flex items-center gap-2 mx-auto"
+          >
+            <MessageSquare className="h-5 w-5" />
+            Share Your Feedback
+          </button>
+        </div>
+      </div>
+
+      {/* Feedback Modal */}
+      {showFeedbackModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <MessageSquare className="h-6 w-6 text-primary-600" />
+                  <h2 className="text-2xl font-bold text-gray-900">Share Your Feedback</h2>
+                </div>
+              </div>
+              <FeedbackForm onClose={() => setShowFeedbackModal(false)} isModal={true} />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* CTA Section */}
       <div className="bg-primary-600 py-16">
