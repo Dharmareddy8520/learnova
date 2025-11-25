@@ -59,7 +59,7 @@ describe('Auth Routes', () => {
       const timestamp = Date.now()
       const userData = {
         name: 'Test User',
-        email: `test${timestamp}@example.com`,  // Unique email
+        email: `test${timestamp}@example.com`,
         password: 'password123'
       }
 
