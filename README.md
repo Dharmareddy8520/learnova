@@ -513,4 +513,4 @@ For support, email support@learnova.com or open an issue on GitHub.
 
 ---
 
-**Built with ❤️ by the Learnova Team**
+**Built with ❤️ by the Learnova Team members**
